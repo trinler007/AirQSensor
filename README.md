@@ -73,6 +73,8 @@ GPIO8 und GPIO9 sind auf dem ESP32-S3-DevKitC-1 frei nutzbar und liegen zusammen
 
 Die lokale externe Komponente liest den aktiven 9-Byte-Datenrahmen des ZE07-CO, prüft Startbyte, Gasart, Einheit, Dezimalstellen, Prüfsumme und Messbereich. Fehlerhafte Frames werden verworfen und gezählt. Nach fünf Sekunden ohne gültigen Frame wird „CO Sensor verbunden“ ausgeschaltet.
 
+Boarddefinition, WLAN, API-Verschlüsselung und OTA-Zugang stehen bewusst separat in `wohnbereich.yaml` und `fahrerhaus.yaml`. Damit lassen sich Hardwarevarianten und Sicherheitsschlüssel je Gerät unabhängig verwalten. Sensoren, Busbelegung und Bewertungslogik bleiben im gemeinsamen Paket `common/air-quality.yaml`.
+
 ## Home-Assistant-Entitäten
 
 - CO₂, CO, VOC Index, NOx Index, Temperatur und Luftfeuchte
@@ -85,7 +87,7 @@ Die Bewertungslogik kombiniert Absolutwerte und Ein-Minuten-Trends. Die Vorgaben
 
 ## Inbetriebnahme
 
-1. `secrets.example.yaml` als `secrets.yaml` kopieren und Zugangsdaten einsetzen. Für jedes Modul kann bei Bedarf eine eigene Secrets-Datei bzw. ein eigener API-Schlüssel verwendet werden.
+1. `secrets.example.yaml` als `secrets.yaml` kopieren und Zugangsdaten einsetzen. Wohnbereich und Fahrerhaus verwenden getrennte API-Schlüssel sowie getrennte OTA- und Fallback-Passwörter; nur die WLAN-Zugangsdaten sind standardmäßig gemeinsam.
 2. Verdrahtung und Versorgungsspannungen am konkreten Breakout prüfen. Noch keinen Sensor in ein geschlossenes Gehäuse setzen.
 3. Konfiguration validieren: `esphome config wohnbereich.yaml` und `esphome config fahrerhaus.yaml`.
 4. Erstinstallation per USB: `esphome run wohnbereich.yaml` beziehungsweise `esphome run fahrerhaus.yaml`.
