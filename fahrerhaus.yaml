@@ -1,0 +1,8 @@
+substitutions:
+  device_name: airq-fahrerhaus
+  friendly_name: "AirQ Fahrerhaus"
+  device_location: "Fahrerhaus nahe Eberspächer-Heizung"
+
+packages:
+  air_quality: !include common/air-quality.yaml
+

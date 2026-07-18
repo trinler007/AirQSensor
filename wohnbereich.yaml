@@ -1,0 +1,8 @@
+substitutions:
+  device_name: airq-wohnbereich
+  friendly_name: "AirQ Wohnbereich"
+  device_location: "Wohnbereich nahe Truma D6E"
+
+packages:
+  air_quality: !include common/air-quality.yaml
+

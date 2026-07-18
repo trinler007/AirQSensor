@@ -1,0 +1,36 @@
+# Beispiel: Entitäts- und Notify-Namen nach dem Einbinden der Geräte anpassen.
+- alias: "AirQ CO Diagnosealarm"
+  id: airq_co_diagnosealarm
+  mode: parallel
+  triggers:
+    - trigger: state
+      entity_id:
+        - binary_sensor.airq_wohnbereich_co_diagnosealarm
+        - binary_sensor.airq_fahrerhaus_co_diagnosealarm
+      to: "on"
+      for: "00:00:05"
+  actions:
+    - action: notify.mobile_app_MEIN_TELEFON
+      data:
+        title: "CO-Diagnosealarm im Wohnmobil"
+        message: >-
+          {{ trigger.to_state.attributes.friendly_name }} meldet einen erhöhten CO-Wert.
+          Sofort lüften, Heizungen/Verbrenner abschalten und einen sicheren Ort aufsuchen.
+          Nicht auf dieses nicht zertifizierte System als Personenschutz verlassen.
+
+- alias: "AirQ mögliche Abgase"
+  id: airq_moegliche_abgase
+  mode: parallel
+  triggers:
+    - trigger: state
+      entity_id:
+        - binary_sensor.airq_wohnbereich_mogliche_abgase
+        - binary_sensor.airq_fahrerhaus_mogliche_abgase
+      to: "on"
+      for: "00:00:30"
+  actions:
+    - action: notify.mobile_app_MEIN_TELEFON
+      data:
+        title: "AirQ: mögliche Abgase"
+        message: "CO, VOC und NOx steigen gleichzeitig. Innenraum lüften und Verbrennungsquellen prüfen."
+
