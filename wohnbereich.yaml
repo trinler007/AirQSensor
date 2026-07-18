@@ -2,6 +2,7 @@ substitutions:
   device_name: airq-wohnbereich
   friendly_name: "AirQ Wohnbereich"
   device_location: "Wohnbereich nahe Truma D6E"
+  assessment_location: "im Wohnbereich"
 
 esp32:
   board: esp32-s3-devkitc-1

@@ -2,6 +2,7 @@ substitutions:
   device_name: airq-fahrerhaus
   friendly_name: "AirQ Fahrerhaus"
   device_location: "Fahrerhaus nahe Eberspächer-Heizung"
+  assessment_location: "im Fahrerhaus"
 
 esp32:
   board: esp32-s3-devkitc-1

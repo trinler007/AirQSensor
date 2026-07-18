@@ -75,7 +75,7 @@ Die lokale externe Komponente liest den aktiven 9-Byte-Datenrahmen des ZE07-CO, 
 
 Boarddefinition, WLAN, API-Verschlüsselung, OTA-Zugang und die authentifizierte Quelle der externen Komponente stehen bewusst separat in `wohnbereich.yaml` und `fahrerhaus.yaml`. Damit lassen sich Hardwarevarianten und Sicherheitsschlüssel je Gerät unabhängig verwalten. Sensoren, Busbelegung und Bewertungslogik werden als Remote-Package direkt aus `common/air-quality.yaml` auf GitHub geladen.
 
-Der serielle Logger läuft auf dem ESP32-S3-DevKitC-1 explizit mit `DEBUG` über `UART0` (GPIO43/44). Der ZE07 verwendet unabhängig davon UART1 mit RX auf GPIO18. Bei jeder Konfigurations- oder Funktionsänderung wird `esphome.project.version` in `common/air-quality.yaml` erhöht. Aktuelle Projektversion: `0.1.2`.
+Der serielle Logger läuft auf dem ESP32-S3-DevKitC-1 explizit mit `DEBUG` über `UART0` (GPIO43/44). Der ZE07 verwendet unabhängig davon UART1 mit RX auf GPIO18. Bei jeder Konfigurations- oder Funktionsänderung wird `esphome.project.version` in `common/air-quality.yaml` erhöht. Aktuelle Projektversion: `0.1.3`.
 
 Da das Repository privat ist, enthalten beide lokalen Geräte-YAMLs die Git-Zugangsdaten als `!secret`-Verweise sowohl beim Package als auch bei `external_components`. Dadurch reichen für ESPHome in Home Assistant die gewünschte Geräte-YAML und eine passende `secrets.yaml`; die Verzeichnisse `common/` und `components/` müssen nicht manuell kopiert werden. ESPHome prüft stündlich auf Änderungen des Branches `main`.
 
@@ -90,6 +90,7 @@ Für `github_password` ist ein Fine-grained GitHub Personal Access Token mit aus
 - UART-Diagnose: Verbindung, Framefehler und gemeldeter CO-Messbereich
 - persistente Konfigurationswerte für alle Bewertungs- und Trendgrenzen
 - vollständige, natürlich formulierte „Luftqualität Bewertung“ für Sprachassistenten
+- kompakte „Luftqualität Kurzbewertung“ mit Gesamtstufe und nur den negativ beitragenden Werten
 
 Die Bewertungslogik kombiniert Absolutwerte und Ein-Minuten-Trends. Alle Grenzen erscheinen in Home Assistant als Zahlenentitäten der Kategorie „Konfiguration“. Änderungen werden auf dem ESP gespeichert und bleiben nach einem Neustart erhalten. Die Startwerte können zusätzlich über die `substitutions` am Anfang von `common/air-quality.yaml` geändert werden. Bereits gespeicherte HA-Werte haben danach Vorrang. Trends direkt nach Neustart benötigen mindestens zwei Messintervalle.
 
@@ -109,7 +110,11 @@ Die Bewertungslogik kombiniert Absolutwerte und Ein-Minuten-Trends. Alle Grenzen
 
 Die VOC- und NOx-Grenzen sind bewusst anpassbare Diagnose-Startwerte. Nach Sensirion entspricht VOC Index 100 der mittleren Gaszusammensetzung der vergangenen 24 Stunden; beim NOx Index wird der adaptive Normalzustand auf 1 abgebildet. Die Indizes sind daher relative Ereignissignale und keine Konzentrationen oder allgemeingültigen Gesundheitsgrenzwerte. Die Reihenfolge der jeweils niedrigen und hohen Grenzwerte muss beim Anpassen erhalten bleiben.
 
-Der Textsensor „Luftqualität Bewertung“ nennt Gesamtstufe, Messwert und Einzelbewertung aller sechs Umweltparameter sowie eine priorisierte Empfehlung. Sein Zustand ist bewusst als vollständiger deutscher Satz formuliert und kann in Home-Assistant-Skripten oder Assist-Intents direkt als Sprachausgabe verwendet werden, zum Beispiel: „Luftqualität auffällig. Kohlendioxid 1350 ppm, erhöht; … Empfehlung: jetzt lüften.“
+Die lokale Substitution `assessment_location` legt die Ortsformulierung beider Bewertungssensoren fest. Vorkonfiguriert sind `im Wohnbereich` und `im Fahrerhaus`; andere grammatisch passende Angaben wie `in der Schlafkabine` sind möglich. Fehlt die lokale Substitution in einer älteren Geräte-YAML, verwendet das gemeinsame Package den kompatiblen Standard `am Messort`.
+
+Der Textsensor „Luftqualität Bewertung“ nennt Gesamtstufe, Messwert und Einzelbewertung aller sechs Umweltparameter sowie eine priorisierte Empfehlung. Sein Zustand ist bewusst als vollständiger deutscher Satz formuliert und kann in Home-Assistant-Skripten oder Assist-Intents direkt als Sprachausgabe verwendet werden, zum Beispiel: „Die Luftqualität im Wohnbereich ist auffällig. CO2 1350 ppm, erhöht; … Empfehlung: jetzt lüften.“
+
+Die zusätzliche „Luftqualität Kurzbewertung“ nennt bei guter Luft nur die Gesamtbewertung. Bei Abweichungen folgen ausschließlich Werte, die die Gesamtstufe verschlechtern, zum Beispiel: „Die Luftqualität im Wohnbereich ist auffällig. Auffällig: Kohlendioxid 1350 ppm; Feuchte 68 Prozent.“ Aktive Abgas- oder Verbrennungstrends werden ebenfalls knapp genannt.
 
 ## Inbetriebnahme
 

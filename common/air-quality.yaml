@@ -1,5 +1,7 @@
 substitutions:
   # Diagnose-Startwerte, keine normativen oder zertifizierten Alarmgrenzen.
+  # Die lokale Geraete-YAML kann dies z. B. mit "im Wohnbereich" ueberschreiben.
+  assessment_location: "am Messort"
   co_alarm_default: "30.0"
   co_elevated_default: "5.0"
   co2_ventilation_default: "1000.0"
@@ -23,7 +25,7 @@ esphome:
   min_version: 2026.7.0
   project:
     name: trinler.airq_sensor
-    version: "0.1.2"
+    version: "0.1.3"
 
 logger:
   level: DEBUG
@@ -438,7 +440,7 @@ text_sensor:
       if (isnan(id(co).state) || isnan(id(co2).state) ||
           isnan(id(voc_index).state) || isnan(id(nox_index).state) ||
           isnan(id(temperature).state) || isnan(id(humidity).state))
-        return {"Die Luftqualität wird noch ermittelt. Es fehlen gültige Messwerte."};
+        return {"Die Luftqualität ${assessment_location} wird noch ermittelt. Es fehlen gültige Messwerte."};
 
       const float co_value = id(co).state;
       const float co2_value = id(co2).state;
@@ -533,12 +535,92 @@ text_sensor:
       else if (severity >= 4) overall_text = "kritisch";
 
       return {str_sprintf(
-        "Luftqualität %s. Kohlendioxid %.0f ppm, %s; CO %.1f ppm, %s; VOC Index %.0f, %s; "
-        "NOx Index %.0f, %s; Temperatur %.1f Grad, %s; Feuchte %.0f Prozent, %s. "
+        "Die Luftqualität ${assessment_location} ist %s. CO2 %.0f ppm, %s; CO %.1f ppm, %s; VOC %.0f, %s; "
+        "NOx %.0f, %s; Temperatur %.1f Grad, %s; Feuchte %.0f Prozent, %s. "
         "Empfehlung: %s.",
         overall_text, co2_value, co2_text, co_value, co_text, voc_value, voc_text,
         nox_value, nox_text, temperature_value, temperature_text, humidity_value,
         humidity_text, recommendation)};
+
+  - platform: template
+    name: "Luftqualität Kurzbewertung"
+    icon: mdi:account-voice
+    update_interval: 30s
+    lambda: |-
+      if (isnan(id(co).state) || isnan(id(co2).state) ||
+          isnan(id(voc_index).state) || isnan(id(nox_index).state) ||
+          isnan(id(temperature).state) || isnan(id(humidity).state))
+        return {"Die Luftqualität ${assessment_location} wird noch ermittelt."};
+
+      std::string negative_values;
+      auto add_value = [&negative_values](const std::string &value) {
+        if (!negative_values.empty()) negative_values += "; ";
+        negative_values += value;
+      };
+      int severity = 0;
+
+      if (id(co).state >= id(co_alarm_limit).state) {
+        add_value(str_sprintf("CO %.1f ppm", id(co).state));
+        severity = 4;
+      } else if (id(co).state >= id(co_elevated_limit).state) {
+        add_value(str_sprintf("CO %.1f ppm", id(co).state));
+        severity = 3;
+      }
+
+      if (id(co2).state >= id(co2_critical_limit).state) {
+        add_value(str_sprintf("Kohlendioxid %.0f ppm", id(co2).state));
+        if (severity < 3) severity = 3;
+      } else if (id(co2).state >= id(co2_ventilation_limit).state) {
+        add_value(str_sprintf("Kohlendioxid %.0f ppm", id(co2).state));
+        if (severity < 2) severity = 2;
+      }
+
+      if (id(voc_index).state >= id(voc_high_limit).state) {
+        add_value(str_sprintf("VOC Index %.0f", id(voc_index).state));
+        if (severity < 3) severity = 3;
+      } else if (id(voc_index).state >= id(voc_elevated_limit).state) {
+        add_value(str_sprintf("VOC Index %.0f", id(voc_index).state));
+        if (severity < 2) severity = 2;
+      }
+
+      if (id(nox_index).state >= id(nox_high_limit).state) {
+        add_value(str_sprintf("NOx Index %.0f", id(nox_index).state));
+        if (severity < 3) severity = 3;
+      } else if (id(nox_index).state >= id(nox_elevated_limit).state) {
+        add_value(str_sprintf("NOx Index %.0f", id(nox_index).state));
+        if (severity < 2) severity = 2;
+      }
+
+      if (id(temperature).state < id(temperature_min_limit).state ||
+          id(temperature).state > id(temperature_max_limit).state) {
+        add_value(str_sprintf("Temperatur %.1f Grad", id(temperature).state));
+        if (severity < 1) severity = 1;
+      }
+
+      if (id(humidity).state < id(humidity_min_limit).state ||
+          id(humidity).state > id(humidity_max_limit).state) {
+        add_value(str_sprintf("Feuchte %.0f Prozent", id(humidity).state));
+        if (severity < 1) severity = 1;
+      }
+
+      if (id(possible_exhaust).state) {
+        add_value("Abgastrend aktiv");
+        severity = 4;
+      } else if (id(combustion_suspicious).state) {
+        add_value("Verbrennungstrend aktiv");
+        if (severity < 3) severity = 3;
+      }
+
+      const char *overall_text = "gut";
+      if (severity == 1) overall_text = "mäßig";
+      else if (severity == 2) overall_text = "auffällig";
+      else if (severity == 3) overall_text = "schlecht";
+      else if (severity >= 4) overall_text = "kritisch";
+
+      if (negative_values.empty())
+        return {"Die Luftqualität ${assessment_location} ist gut."};
+      return {str_sprintf("Die Luftqualität ${assessment_location} ist %s. Auffällig: %s.",
+                          overall_text, negative_values.c_str())};
 
   - platform: version
     name: "ESPHome Version"
