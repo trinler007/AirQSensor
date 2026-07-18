@@ -73,7 +73,9 @@ GPIO8 und GPIO9 sind auf dem ESP32-S3-DevKitC-1 frei nutzbar und liegen zusammen
 
 Die lokale externe Komponente liest den aktiven 9-Byte-Datenrahmen des ZE07-CO, prüft Startbyte, Gasart, Einheit, Dezimalstellen, Prüfsumme und Messbereich. Fehlerhafte Frames werden verworfen und gezählt. Nach fünf Sekunden ohne gültigen Frame wird „CO Sensor verbunden“ ausgeschaltet.
 
-Boarddefinition, WLAN, API-Verschlüsselung und OTA-Zugang stehen bewusst separat in `wohnbereich.yaml` und `fahrerhaus.yaml`. Damit lassen sich Hardwarevarianten und Sicherheitsschlüssel je Gerät unabhängig verwalten. Sensoren, Busbelegung und Bewertungslogik bleiben im gemeinsamen Paket `common/air-quality.yaml`.
+Boarddefinition, WLAN, API-Verschlüsselung und OTA-Zugang stehen bewusst separat in `wohnbereich.yaml` und `fahrerhaus.yaml`. Damit lassen sich Hardwarevarianten und Sicherheitsschlüssel je Gerät unabhängig verwalten. Sensoren, Busbelegung und Bewertungslogik werden als Remote-Package direkt aus `common/air-quality.yaml` auf GitHub geladen; auch die externe ZE07-Komponente wird von dort bezogen.
+
+Dadurch reichen für ESPHome in Home Assistant die gewünschte Geräte-YAML und eine passende `secrets.yaml`. Die Verzeichnisse `common/` und `components/` müssen nicht manuell in den ESPHome-Konfigurationsordner kopiert werden. ESPHome prüft standardmäßig stündlich auf Änderungen des Branches `main`.
 
 ## Home-Assistant-Entitäten
 
@@ -88,11 +90,12 @@ Die Bewertungslogik kombiniert Absolutwerte und Ein-Minuten-Trends. Die Vorgaben
 ## Inbetriebnahme
 
 1. `secrets.example.yaml` als `secrets.yaml` kopieren und Zugangsdaten einsetzen. Wohnbereich und Fahrerhaus verwenden getrennte API-Schlüssel sowie getrennte OTA- und Fallback-Passwörter; nur die WLAN-Zugangsdaten sind standardmäßig gemeinsam.
-2. Verdrahtung und Versorgungsspannungen am konkreten Breakout prüfen. Noch keinen Sensor in ein geschlossenes Gehäuse setzen.
-3. Konfiguration validieren: `esphome config wohnbereich.yaml` und `esphome config fahrerhaus.yaml`.
-4. Erstinstallation per USB: `esphome run wohnbereich.yaml` beziehungsweise `esphome run fahrerhaus.yaml`.
-5. Beide Geräte in Home Assistant übernehmen und die Messwerte mehrere Tage vergleichen.
-6. Die Beispiele aus `home-assistant/automations.yaml` in Home Assistant übernehmen und `notify.mobile_app_MEIN_TELEFON` sowie gegebenenfalls die Entity-IDs anpassen.
+2. `wohnbereich.yaml` oder `fahrerhaus.yaml` in den ESPHome-Konfigurationsordner von Home Assistant übernehmen. Das gemeinsame Package und die ZE07-Komponente werden beim Validieren beziehungsweise Kompilieren von GitHub geladen.
+3. Verdrahtung und Versorgungsspannungen am konkreten Breakout prüfen. Noch keinen Sensor in ein geschlossenes Gehäuse setzen.
+4. Konfiguration validieren: `esphome config wohnbereich.yaml` und `esphome config fahrerhaus.yaml`.
+5. Erstinstallation per USB: `esphome run wohnbereich.yaml` beziehungsweise `esphome run fahrerhaus.yaml`.
+6. Beide Geräte in Home Assistant übernehmen und die Messwerte mehrere Tage vergleichen.
+7. Die Beispiele aus `home-assistant/automations.yaml` in Home Assistant übernehmen und `notify.mobile_app_MEIN_TELEFON` sowie gegebenenfalls die Entity-IDs anpassen.
 
 SCD41 und SGP41 benötigen geeignete Einlauf- und Betriebsbedingungen. Automatische SCD41-Selbstkalibrierung ist nur sinnvoll, wenn der Sensor regelmäßig über längere Zeit Frischluftniveau sieht. Im dauerhaft bewohnten oder selten gelüfteten Fahrzeug sollte ASC geprüft und gegebenenfalls deaktiviert sowie kontrolliert zwangskalibriert werden. Der ZE07-CO benötigt laut Hersteller bis zu drei Minuten Aufwärmzeit und hat eine typische Sensorlebensdauer von 3–5 Jahren in Luft.
 

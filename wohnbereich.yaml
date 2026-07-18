@@ -25,4 +25,9 @@ ota:
     password: !secret ota_password_wohnbereich
 
 packages:
-  air_quality: !include common/air-quality.yaml
+  air_quality:
+    url: https://github.com/trinler007/AirQSensor
+    ref: main
+    files:
+      - common/air-quality.yaml
+    refresh: 1h
