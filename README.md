@@ -75,7 +75,7 @@ Die lokale externe Komponente liest den aktiven 9-Byte-Datenrahmen des ZE07-CO, 
 
 Boarddefinition, WLAN, API-Verschlüsselung, OTA-Zugang und die authentifizierte Quelle der externen Komponente stehen bewusst separat in `wohnbereich.yaml` und `fahrerhaus.yaml`. Damit lassen sich Hardwarevarianten und Sicherheitsschlüssel je Gerät unabhängig verwalten. Sensoren, Busbelegung und Bewertungslogik werden als Remote-Package direkt aus `common/air-quality.yaml` auf GitHub geladen.
 
-Der serielle Logger läuft auf dem ESP32-S3-DevKitC-1 explizit mit `DEBUG` über `UART0` (GPIO43/44). Der ZE07 verwendet unabhängig davon UART1 mit RX auf GPIO18. Bei jeder Konfigurations- oder Funktionsänderung wird `esphome.project.version` in `common/air-quality.yaml` erhöht. Aktuelle Projektversion: `0.1.3`.
+Der serielle Logger läuft auf dem ESP32-S3-DevKitC-1 explizit über `UART0` (GPIO43/44). Der ZE07 verwendet unabhängig davon UART1 mit RX auf GPIO18. Alle Logstufen bis `VERY_VERBOSE` sind einkompiliert; nach jedem Start gilt `DEBUG`. Die Konfigurationsentität „Logger Level“ kann das globale Level in Home Assistant ohne Neustart ändern. `VERBOSE` und `VERY_VERBOSE` sind nur für kurze Diagnosen vorgesehen und werden bewusst nicht über einen Neustart hinweg gespeichert. Bei jeder Konfigurations- oder Funktionsänderung wird `esphome.project.version` in `common/air-quality.yaml` erhöht. Aktuelle Projektversion: `0.1.4`.
 
 Da das Repository privat ist, enthalten beide lokalen Geräte-YAMLs die Git-Zugangsdaten als `!secret`-Verweise sowohl beim Package als auch bei `external_components`. Dadurch reichen für ESPHome in Home Assistant die gewünschte Geräte-YAML und eine passende `secrets.yaml`; die Verzeichnisse `common/` und `components/` müssen nicht manuell kopiert werden. ESPHome prüft stündlich auf Änderungen des Branches `main`.
 
@@ -89,6 +89,7 @@ Für `github_password` ist ein Fine-grained GitHub Personal Access Token mit aus
 - „Lüften empfohlen“, „Heizung oder Verbrennung auffällig“, „Mögliche Abgase“ und „CO Diagnosealarm“
 - UART-Diagnose: Verbindung, Framefehler und gemeldeter CO-Messbereich
 - persistente Konfigurationswerte für alle Bewertungs- und Trendgrenzen
+- zur Laufzeit einstellbares globales Logger-Level
 - vollständige, natürlich formulierte „Luftqualität Bewertung“ für Sprachassistenten
 - kompakte „Luftqualität Kurzbewertung“ mit Gesamtstufe und nur den negativ beitragenden Werten
 
@@ -144,6 +145,7 @@ Optional lassen sich später Feinstaub, Luftdruck, Helligkeit, Buzzer oder eine 
 - [ESPHome SCD4X](https://esphome.io/components/sensor/scd4x/)
 - [ESPHome SGP4X](https://esphome.io/components/sensor/sgp4x/)
 - [ESPHome Template Number](https://esphome.io/components/number/template/)
+- [ESPHome Logger und Logger Select](https://esphome.io/components/logger/)
 - [ESPHome UART](https://esphome.io/components/uart/)
 - [Sensirion SGP41 Datenblatt und Interpretation der Gasindizes](https://sensirion.com/media/documents/5FE8673C/61E96F50/Sensirion_Gas_Sensors_Datasheet_SGP41.pdf)
 - [Umweltbundesamt: CO₂-Leitwerte für Innenräume](https://www.umweltbundesamt.de/richtig-lueften-in-schulen)
