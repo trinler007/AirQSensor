@@ -1,13 +1,20 @@
 substitutions:
   # Diagnose-Startwerte, keine normativen oder zertifizierten Alarmgrenzen.
-  co_alarm_ppm: "30.0"
-  co_elevated_ppm: "5.0"
-  co2_ventilation_ppm: "1200.0"
-  voc_ventilation_index: "150.0"
-  co_rise_ppm_per_min: "2.0"
-  voc_rise_per_min: "5.0"
-  nox_rise_per_min: "2.0"
-  co2_normal_max_ppm: "1200.0"
+  co_alarm_default: "30.0"
+  co_elevated_default: "5.0"
+  co2_ventilation_default: "1000.0"
+  co2_critical_default: "2000.0"
+  voc_elevated_default: "150.0"
+  voc_high_default: "250.0"
+  nox_elevated_default: "2.0"
+  nox_high_default: "10.0"
+  temperature_min_default: "20.0"
+  temperature_max_default: "24.0"
+  humidity_min_default: "40.0"
+  humidity_max_default: "60.0"
+  co_rise_default: "2.0"
+  voc_rise_default: "5.0"
+  nox_rise_default: "2.0"
 
 esphome:
   name: ${device_name}
@@ -16,7 +23,7 @@ esphome:
   min_version: 2026.7.0
   project:
     name: trinler.airq_sensor
-    version: "0.1.1"
+    version: "0.1.2"
 
 logger:
   level: DEBUG
@@ -42,6 +49,212 @@ uart:
   parity: NONE
   stop_bits: 1
   rx_buffer_size: 256
+
+# Persistente Diagnosegrenzen. Aenderungen in Home Assistant bleiben nach
+# einem Neustart erhalten. Es handelt sich nicht um zertifizierte Alarmwerte.
+number:
+  - platform: template
+    name: "Grenzwert CO erhöht"
+    id: co_elevated_limit
+    unit_of_measurement: "ppm"
+    icon: mdi:molecule-co
+    entity_category: config
+    min_value: 1
+    max_value: 50
+    step: 1
+    initial_value: ${co_elevated_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Grenzwert CO Diagnosealarm"
+    id: co_alarm_limit
+    unit_of_measurement: "ppm"
+    icon: mdi:molecule-co
+    entity_category: config
+    min_value: 5
+    max_value: 200
+    step: 1
+    initial_value: ${co_alarm_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Grenzwert CO2 lüften"
+    id: co2_ventilation_limit
+    unit_of_measurement: "ppm"
+    icon: mdi:molecule-co2
+    entity_category: config
+    min_value: 600
+    max_value: 2500
+    step: 50
+    initial_value: ${co2_ventilation_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Grenzwert CO2 kritisch"
+    id: co2_critical_limit
+    unit_of_measurement: "ppm"
+    icon: mdi:molecule-co2
+    entity_category: config
+    min_value: 1000
+    max_value: 5000
+    step: 100
+    initial_value: ${co2_critical_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Grenzwert VOC erhöht"
+    id: voc_elevated_limit
+    icon: mdi:air-filter
+    entity_category: config
+    min_value: 100
+    max_value: 400
+    step: 5
+    initial_value: ${voc_elevated_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Grenzwert VOC hoch"
+    id: voc_high_limit
+    icon: mdi:air-filter
+    entity_category: config
+    min_value: 150
+    max_value: 500
+    step: 5
+    initial_value: ${voc_high_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Grenzwert NOx erhöht"
+    id: nox_elevated_limit
+    icon: mdi:air-filter
+    entity_category: config
+    min_value: 2
+    max_value: 200
+    step: 1
+    initial_value: ${nox_elevated_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Grenzwert NOx hoch"
+    id: nox_high_limit
+    icon: mdi:air-filter
+    entity_category: config
+    min_value: 5
+    max_value: 500
+    step: 1
+    initial_value: ${nox_high_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Empfohlene Temperatur Minimum"
+    id: temperature_min_limit
+    unit_of_measurement: "°C"
+    device_class: temperature
+    entity_category: config
+    min_value: 10
+    max_value: 25
+    step: 0.5
+    initial_value: ${temperature_min_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Empfohlene Temperatur Maximum"
+    id: temperature_max_limit
+    unit_of_measurement: "°C"
+    device_class: temperature
+    entity_category: config
+    min_value: 18
+    max_value: 35
+    step: 0.5
+    initial_value: ${temperature_max_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Empfohlene Luftfeuchte Minimum"
+    id: humidity_min_limit
+    unit_of_measurement: "%"
+    device_class: humidity
+    entity_category: config
+    min_value: 20
+    max_value: 60
+    step: 1
+    initial_value: ${humidity_min_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Empfohlene Luftfeuchte Maximum"
+    id: humidity_max_limit
+    unit_of_measurement: "%"
+    device_class: humidity
+    entity_category: config
+    min_value: 40
+    max_value: 90
+    step: 1
+    initial_value: ${humidity_max_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Grenzwert CO Anstieg"
+    id: co_rise_limit
+    unit_of_measurement: "ppm/min"
+    entity_category: config
+    min_value: 0.5
+    max_value: 20
+    step: 0.5
+    initial_value: ${co_rise_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Grenzwert VOC Anstieg"
+    id: voc_rise_limit
+    unit_of_measurement: "index/min"
+    entity_category: config
+    min_value: 1
+    max_value: 100
+    step: 1
+    initial_value: ${voc_rise_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Grenzwert NOx Anstieg"
+    id: nox_rise_limit
+    unit_of_measurement: "index/min"
+    entity_category: config
+    min_value: 1
+    max_value: 100
+    step: 1
+    initial_value: ${nox_rise_default}
+    optimistic: true
+    restore_value: true
+    mode: box
 
 sensor:
   - platform: scd4x
@@ -164,38 +377,43 @@ binary_sensor:
 
   - platform: template
     name: "Lüften empfohlen"
+    id: ventilation_recommended
     device_class: problem
     lambda: |-
-      if (isnan(id(co2).state) || isnan(id(voc_index).state) || isnan(id(co).state)) return {};
-      return (id(co2).state >= ${co2_ventilation_ppm} ||
-              id(voc_index).state >= ${voc_ventilation_index}) &&
-             id(co).state < ${co_elevated_ppm};
+      if (isnan(id(co2).state) || isnan(id(voc_index).state) ||
+          isnan(id(nox_index).state) || isnan(id(co).state)) return {};
+      return (id(co2).state >= id(co2_ventilation_limit).state ||
+              id(voc_index).state >= id(voc_elevated_limit).state ||
+              id(nox_index).state >= id(nox_elevated_limit).state) &&
+             id(co).state < id(co_elevated_limit).state;
     filters:
       - delayed_on: 2min
       - delayed_off: 2min
 
   - platform: template
     name: "Heizung oder Verbrennung auffällig"
+    id: combustion_suspicious
     device_class: problem
     lambda: |-
       if (isnan(id(co_trend).state) || isnan(id(voc_trend).state) || isnan(id(co2).state)) return {};
-      return id(co_trend).state >= ${co_rise_ppm_per_min} &&
-             id(voc_trend).state >= ${voc_rise_per_min} &&
-             id(co2).state < ${co2_normal_max_ppm};
+      return id(co_trend).state >= id(co_rise_limit).state &&
+             id(voc_trend).state >= id(voc_rise_limit).state &&
+             id(co2).state < id(co2_ventilation_limit).state;
     filters:
       - delayed_on: 30s
       - delayed_off: 2min
 
   - platform: template
     name: "Mögliche Abgase"
+    id: possible_exhaust
     device_class: problem
     lambda: |-
       if (isnan(id(co).state) || isnan(id(co_trend).state) ||
           isnan(id(voc_trend).state) || isnan(id(nox_trend).state)) return {};
-      return id(co).state >= ${co_elevated_ppm} &&
-             id(co_trend).state >= ${co_rise_ppm_per_min} &&
-             id(voc_trend).state >= ${voc_rise_per_min} &&
-             id(nox_trend).state >= ${nox_rise_per_min};
+      return id(co).state >= id(co_elevated_limit).state &&
+             id(co_trend).state >= id(co_rise_limit).state &&
+             id(voc_trend).state >= id(voc_rise_limit).state &&
+             id(nox_trend).state >= id(nox_rise_limit).state;
     filters:
       - delayed_on: 30s
       - delayed_off: 2min
@@ -206,7 +424,7 @@ binary_sensor:
     device_class: carbon_monoxide
     lambda: |-
       if (isnan(id(co).state)) return {};
-      return id(co).state >= ${co_alarm_ppm};
+      return id(co).state >= id(co_alarm_limit).state;
     filters:
       - delayed_on: 10s
       - delayed_off: 2min
@@ -217,20 +435,110 @@ text_sensor:
     icon: mdi:air-filter
     update_interval: 30s
     lambda: |-
-      if (id(co_diagnostic_alarm).state) return {"CO-Diagnosealarm"};
       if (isnan(id(co).state) || isnan(id(co2).state) ||
-          isnan(id(voc_index).state) || isnan(id(nox_index).state)) return {"Sensoren starten"};
-      if (id(co).state >= ${co_elevated_ppm} &&
-          !isnan(id(nox_trend).state) && id(nox_trend).state >= ${nox_rise_per_min} &&
-          !isnan(id(voc_trend).state) && id(voc_trend).state >= ${voc_rise_per_min})
-        return {"Mögliche Abgase"};
-      if (!isnan(id(co_trend).state) && id(co_trend).state >= ${co_rise_ppm_per_min} &&
-          !isnan(id(voc_trend).state) && id(voc_trend).state >= ${voc_rise_per_min})
-        return {"Verbrennung auffällig"};
-      if ((id(co2).state >= ${co2_ventilation_ppm} ||
-           id(voc_index).state >= ${voc_ventilation_index}) &&
-          id(co).state < ${co_elevated_ppm}) return {"Lüften empfohlen"};
-      return {"Unauffällig"};
+          isnan(id(voc_index).state) || isnan(id(nox_index).state) ||
+          isnan(id(temperature).state) || isnan(id(humidity).state))
+        return {"Die Luftqualität wird noch ermittelt. Es fehlen gültige Messwerte."};
+
+      const float co_value = id(co).state;
+      const float co2_value = id(co2).state;
+      const float voc_value = id(voc_index).state;
+      const float nox_value = id(nox_index).state;
+      const float temperature_value = id(temperature).state;
+      const float humidity_value = id(humidity).state;
+
+      const char *co_text = "unauffällig";
+      const char *co2_text = "gut";
+      const char *voc_text = "normal";
+      const char *nox_text = "normal";
+      const char *temperature_text = "angenehm";
+      const char *humidity_text = "optimal";
+      const char *recommendation = "keine Maßnahme nötig";
+      int severity = 0;
+
+      if (co_value >= id(co_alarm_limit).state) {
+        co_text = "Alarm";
+        severity = 4;
+      } else if (co_value >= id(co_elevated_limit).state) {
+        co_text = "erhöht";
+        severity = 3;
+      }
+
+      if (co2_value >= id(co2_critical_limit).state) {
+        co2_text = "sehr hoch";
+        if (severity < 3) severity = 3;
+      } else if (co2_value >= id(co2_ventilation_limit).state) {
+        co2_text = "erhöht";
+        if (severity < 2) severity = 2;
+      }
+
+      if (voc_value >= id(voc_high_limit).state) {
+        voc_text = "hoch";
+        if (severity < 3) severity = 3;
+      } else if (voc_value >= id(voc_elevated_limit).state) {
+        voc_text = "erhöht";
+        if (severity < 2) severity = 2;
+      }
+
+      if (nox_value >= id(nox_high_limit).state) {
+        nox_text = "hoch";
+        if (severity < 3) severity = 3;
+      } else if (nox_value >= id(nox_elevated_limit).state) {
+        nox_text = "erhöht";
+        if (severity < 2) severity = 2;
+      }
+
+      if (temperature_value < id(temperature_min_limit).state) {
+        temperature_text = "zu kalt";
+        if (severity < 1) severity = 1;
+      } else if (temperature_value > id(temperature_max_limit).state) {
+        temperature_text = "zu warm";
+        if (severity < 1) severity = 1;
+      }
+
+      if (humidity_value < id(humidity_min_limit).state) {
+        humidity_text = "zu trocken";
+        if (severity < 1) severity = 1;
+      } else if (humidity_value > id(humidity_max_limit).state) {
+        humidity_text = "zu hoch";
+        if (severity < 1) severity = 1;
+      }
+
+      if (co_value >= id(co_alarm_limit).state) {
+        recommendation = "sofort lüften, Heizungen aus und Ursache prüfen";
+        severity = 4;
+      } else if (id(possible_exhaust).state) {
+        recommendation = "lüften und Heizungen sowie Abgasführung prüfen";
+        severity = 4;
+      } else if (id(combustion_suspicious).state) {
+        recommendation = "lüften und Verbrennung der Heizung prüfen";
+        if (severity < 3) severity = 3;
+      } else if (co_value >= id(co_elevated_limit).state) {
+        recommendation = "lüften und mögliche CO-Quelle prüfen";
+      } else if (co2_value >= id(co2_ventilation_limit).state ||
+                 voc_value >= id(voc_elevated_limit).state ||
+                 nox_value >= id(nox_elevated_limit).state) {
+        recommendation = "jetzt lüften";
+      } else if (temperature_value < id(temperature_min_limit).state ||
+                 temperature_value > id(temperature_max_limit).state ||
+                 humidity_value < id(humidity_min_limit).state ||
+                 humidity_value > id(humidity_max_limit).state) {
+        recommendation = "Heizung oder Lüftung anpassen";
+      }
+
+      const char *overall_text = "gut";
+      if (severity == 1) overall_text = "mäßig";
+      else if (severity == 2) overall_text = "auffällig";
+      else if (severity == 3) overall_text = "schlecht";
+      else if (severity >= 4) overall_text = "kritisch";
+
+      return {str_sprintf(
+        "Luftqualität %s. Kohlendioxid %.0f ppm, %s; CO %.1f ppm, %s; VOC Index %.0f, %s; "
+        "NOx Index %.0f, %s; Temperatur %.1f Grad, %s; Feuchte %.0f Prozent, %s. "
+        "Empfehlung: %s.",
+        overall_text, co2_value, co2_text, co_value, co_text, voc_value, voc_text,
+        nox_value, nox_text, temperature_value, temperature_text, humidity_value,
+        humidity_text, recommendation)};
 
   - platform: version
     name: "ESPHome Version"
