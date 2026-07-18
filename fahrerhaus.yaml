@@ -24,9 +24,21 @@ ota:
   - platform: esphome
     password: !secret ota_password_fahrerhaus
 
+external_components:
+  - source:
+      type: git
+      url: https://github.com/trinler007/AirQSensor
+      ref: main
+      username: !secret github_username
+      password: !secret github_password
+    components: [ze07_co]
+    refresh: 1h
+
 packages:
   air_quality:
     url: https://github.com/trinler007/AirQSensor
+    username: !secret github_username
+    password: !secret github_password
     ref: main
     files:
       - common/air-quality.yaml

@@ -18,11 +18,6 @@ esphome:
     name: trinler.airq_sensor
     version: "0.1.0"
 
-external_components:
-  - source: github://trinler007/AirQSensor@main
-    components: [ze07_co]
-    refresh: 1h
-
 logger:
   level: INFO
 

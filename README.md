@@ -73,9 +73,11 @@ GPIO8 und GPIO9 sind auf dem ESP32-S3-DevKitC-1 frei nutzbar und liegen zusammen
 
 Die lokale externe Komponente liest den aktiven 9-Byte-Datenrahmen des ZE07-CO, prüft Startbyte, Gasart, Einheit, Dezimalstellen, Prüfsumme und Messbereich. Fehlerhafte Frames werden verworfen und gezählt. Nach fünf Sekunden ohne gültigen Frame wird „CO Sensor verbunden“ ausgeschaltet.
 
-Boarddefinition, WLAN, API-Verschlüsselung und OTA-Zugang stehen bewusst separat in `wohnbereich.yaml` und `fahrerhaus.yaml`. Damit lassen sich Hardwarevarianten und Sicherheitsschlüssel je Gerät unabhängig verwalten. Sensoren, Busbelegung und Bewertungslogik werden als Remote-Package direkt aus `common/air-quality.yaml` auf GitHub geladen; auch die externe ZE07-Komponente wird von dort bezogen.
+Boarddefinition, WLAN, API-Verschlüsselung, OTA-Zugang und die authentifizierte Quelle der externen Komponente stehen bewusst separat in `wohnbereich.yaml` und `fahrerhaus.yaml`. Damit lassen sich Hardwarevarianten und Sicherheitsschlüssel je Gerät unabhängig verwalten. Sensoren, Busbelegung und Bewertungslogik werden als Remote-Package direkt aus `common/air-quality.yaml` auf GitHub geladen.
 
-Dadurch reichen für ESPHome in Home Assistant die gewünschte Geräte-YAML und eine passende `secrets.yaml`. Die Verzeichnisse `common/` und `components/` müssen nicht manuell in den ESPHome-Konfigurationsordner kopiert werden. ESPHome prüft standardmäßig stündlich auf Änderungen des Branches `main`.
+Da das Repository privat ist, enthalten beide lokalen Geräte-YAMLs die Git-Zugangsdaten als `!secret`-Verweise sowohl beim Package als auch bei `external_components`. Dadurch reichen für ESPHome in Home Assistant die gewünschte Geräte-YAML und eine passende `secrets.yaml`; die Verzeichnisse `common/` und `components/` müssen nicht manuell kopiert werden. ESPHome prüft stündlich auf Änderungen des Branches `main`.
+
+Für `github_password` ist ein Fine-grained GitHub Personal Access Token mit ausschließlich lesendem Zugriff auf den Inhalt dieses einen Repositorys vorgesehen. Kein GitHub-Kontopasswort verwenden. ESPHome beziehungsweise Git speichert die Zugangsdaten technisch bedingt im lokalen `.esphome`-Cache im Klartext; der Home-Assistant-Host und seine Backups müssen daher entsprechend geschützt werden.
 
 ## Home-Assistant-Entitäten
 
@@ -89,7 +91,7 @@ Die Bewertungslogik kombiniert Absolutwerte und Ein-Minuten-Trends. Die Vorgaben
 
 ## Inbetriebnahme
 
-1. `secrets.example.yaml` als `secrets.yaml` kopieren und Zugangsdaten einsetzen. Wohnbereich und Fahrerhaus verwenden getrennte API-Schlüssel sowie getrennte OTA- und Fallback-Passwörter; nur die WLAN-Zugangsdaten sind standardmäßig gemeinsam.
+1. `secrets.example.yaml` als `secrets.yaml` kopieren und Zugangsdaten einsetzen. `github_password` erhält ein auf dieses Repository beschränktes Fine-grained GitHub-Lesetoken. Wohnbereich und Fahrerhaus verwenden getrennte API-Schlüssel sowie getrennte OTA- und Fallback-Passwörter; WLAN- und GitHub-Zugang sind standardmäßig gemeinsam.
 2. `wohnbereich.yaml` oder `fahrerhaus.yaml` in den ESPHome-Konfigurationsordner von Home Assistant übernehmen. Das gemeinsame Package und die ZE07-Komponente werden beim Validieren beziehungsweise Kompilieren von GitHub geladen.
 3. Verdrahtung und Versorgungsspannungen am konkreten Breakout prüfen. Noch keinen Sensor in ein geschlossenes Gehäuse setzen.
 4. Konfiguration validieren: `esphome config wohnbereich.yaml` und `esphome config fahrerhaus.yaml`.
