@@ -16,10 +16,13 @@ esphome:
   min_version: 2026.7.0
   project:
     name: trinler.airq_sensor
-    version: "0.1.0"
+    version: "0.1.1"
 
 logger:
-  level: INFO
+  level: DEBUG
+  # Das ESP32-S3-DevKitC-1 fuehrt UART0 auf GPIO43/44 zur USB-UART-Bridge.
+  # Der ZE07 nutzt separat UART1 mit RX auf GPIO18; es besteht kein Konflikt.
+  hardware_uart: UART0
 
 captive_portal:
 
