@@ -28,8 +28,8 @@ flowchart LR
   ESP -- "GPIO8 SDA / GPIO9 SCL" --> SCD
   ESP -- "GPIO8 SDA / GPIO9 SCL" --> SGP
   USB -- "5 V + GND" --> CO["ZE07-CO"]
-  CO -- "TXD 3,0-V-TTL" --> RX["ESP GPIO17 RX"]
-  TX["ESP GPIO18 TX"] -- "3,3-V-TTL" --> CO
+  CO -- "TXD 3,0-V-TTL" --> RX["ESP GPIO18 / U1RXD"]
+  RES["ESP GPIO17 / U1TXD"] -. "reserviert; nicht verbinden" .-> CO
 ```
 
 | ESP32-S3 | SCD41 | SGP41 | ZE07-CO |
@@ -39,12 +39,25 @@ flowchart LR
 | GND | GND | GND | GND |
 | GPIO8 | SDA | SDA | – |
 | GPIO9 | SCL | SCL | – |
-| GPIO17 (RX) | – | – | TXD |
-| GPIO18 (TX) | – | – | RXD |
+| GPIO18 (RX/U1RXD) | – | – | TXD |
+| GPIO17 (TX/U1TXD) | – | – | **nicht verbinden/reserviert** |
 
 \* Vor dem Anschluss immer die konkrete Breakout-Platine prüfen. Das nackte Winsen-Modul benötigt laut Hersteller 5–12 V und gibt UART mit 3,0-V-TTL aus. Manche Händlerplatinen besitzen eigene Regler oder Pegelwandler. SCD41/SGP41-Breakouts können ebenfalls von der Sensirion-Nennspannung abweichende VIN-Angaben haben. Alle Komponenten benötigen eine gemeinsame Masse. I²C-Pull-ups dürfen nur nach 3,3 V führen.
 
-Der ESP empfängt auf GPIO17, daher muss **ZE07 TXD → ESP GPIO17** verbunden werden. Für den standardmäßigen aktiven Sendemodus des ZE07 ist die Gegenrichtung optional; GPIO18 ist für Konfiguration oder späteren Frage-Antwort-Betrieb vorgesehen.
+Der ESP empfängt auf GPIO18, dem nativen `U1RXD`-Pin des ESP32-S3. Deshalb wird **ZE07 TXD → ESP GPIO18** verbunden. Der ZE07 sendet im werkseitigen aktiven Modus jede Sekunde selbstständig; seine RXD-Leitung bleibt offen. Damit wird vermieden, den laut Datenblatt für 0–3,0-V-Daten vorgesehenen ZE07-Eingang direkt mit einem 3,3-V-Ausgang des ESP zu treiben.
+
+GPIO17 ist der native `U1TXD`-Pin und bleibt für eine mögliche spätere Q&A-Erweiterung reserviert. Vor einer solchen Erweiterung müssen die konkrete ZE07-Platine und deren zulässiger RXD-Pegel geprüft und bei Bedarf eine geeignete unidirektionale Pegelanpassung vorgesehen werden.
+
+### Prüfung der GPIO-Auswahl
+
+| Funktion | GPIO | Begründung |
+|---|---:|---|
+| I²C SDA | 8 | frei herausgeführt, kein Boot-Strapping-Pin, für die GPIO-Matrix geeignet |
+| I²C SCL | 9 | frei herausgeführt, kein Boot-Strapping-Pin, für die GPIO-Matrix geeignet |
+| ZE07 UART RX | 18 | nativer `U1RXD`-Pin des ESP32-S3 |
+| UART TX Reserve | 17 | nativer `U1TXD`-Pin; im aktiven ZE07-Modus nicht erforderlich |
+
+GPIO8 und GPIO9 sind auf dem ESP32-S3-DevKitC-1 frei nutzbar und liegen zusammen mit GPIO17/18 gut zugänglich am J1-Header. GPIO0, GPIO3, GPIO45 und GPIO46 werden für dieses Projekt bewusst nicht verwendet, da sie Boot-Strapping-Funktionen besitzen. GPIO19/20 bleiben ebenfalls frei, damit die native USB-Schnittstelle nicht beeinträchtigt wird.
 
 ## Softwarestruktur
 
@@ -103,4 +116,3 @@ Optional lassen sich später Feinstaub, Luftdruck, Helligkeit, Buzzer oder eine 
 ## Lizenz
 
 MIT – siehe [LICENSE](LICENSE).
-

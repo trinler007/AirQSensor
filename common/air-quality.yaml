@@ -58,8 +58,9 @@ i2c:
 
 uart:
   id: ze07_uart
-  rx_pin: GPIO17
-  tx_pin: GPIO18
+  # Nativer U1RXD-Pin des ESP32-S3. Der ZE07 sendet im aktiven Modus
+  # selbstständig; eine TX-Leitung ist dafür weder nötig noch angeschlossen.
+  rx_pin: GPIO18
   baud_rate: 9600
   data_bits: 8
   parity: NONE
@@ -263,4 +264,3 @@ button:
   - platform: restart
     name: "Neustart"
     entity_category: diagnostic
-
