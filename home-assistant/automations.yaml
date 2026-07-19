@@ -34,3 +34,55 @@
         title: "AirQ: mögliche Abgase"
         message: "CO, VOC und NOx steigen gleichzeitig. Innenraum lüften und Verbrennungsquellen prüfen."
 
+- alias: "AirQ Sensordaten fehlen"
+  id: airq_sensordaten_fehlen
+  mode: parallel
+  triggers:
+    - trigger: state
+      entity_id:
+        - binary_sensor.airq_wohnbereich_messdaten_aktuell
+        - binary_sensor.airq_fahrerhaus_messdaten_aktuell
+      to: "off"
+      for: "00:05:00"
+  actions:
+    - action: notify.mobile_app_MEIN_TELEFON
+      data:
+        title: "AirQ: Sensor prüfen"
+        message: >-
+          {{ trigger.to_state.attributes.friendly_name }} ist seit fünf Minuten nicht aktuell.
+          Stromversorgung, Verkabelung und den Textsensor „Sensorzustand“ prüfen.
+
+- alias: "AirQ Kondensationsrisiko"
+  id: airq_kondensationsrisiko
+  mode: parallel
+  triggers:
+    - trigger: state
+      entity_id:
+        - binary_sensor.airq_wohnbereich_kondensationsrisiko
+        - binary_sensor.airq_fahrerhaus_kondensationsrisiko
+      to: "on"
+      for: "00:15:00"
+  actions:
+    - action: notify.mobile_app_MEIN_TELEFON
+      data:
+        title: "AirQ: Kondensationsrisiko"
+        message: >-
+          {{ trigger.to_state.attributes.friendly_name }} ist seit 15 Minuten aktiv.
+          Feuchte reduzieren, lüften und bekannte Kältebrücken kontrollieren.
+
+- alias: "AirQ ZE07 Wartung fällig"
+  id: airq_ze07_wartung_faellig
+  mode: parallel
+  triggers:
+    - trigger: state
+      entity_id:
+        - binary_sensor.airq_wohnbereich_ze07_wartung_fallig
+        - binary_sensor.airq_fahrerhaus_ze07_wartung_fallig
+      to: "on"
+  actions:
+    - action: persistent_notification.create
+      data:
+        title: "AirQ: ZE07 prüfen"
+        message: >-
+          {{ trigger.to_state.attributes.friendly_name }} hat das konfigurierte
+          Wartungsintervall erreicht. Sensoralter, Funktion und Austausch prüfen.

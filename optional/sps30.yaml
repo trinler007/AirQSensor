@@ -1,0 +1,29 @@
+# Optionaler Sensirion SPS30 auf dem vorhandenen I2C-Bus (Adresse 0x69).
+# Versorgung mit 5 V; zum ESP32 ist eine sichere 3,3-V-I2C-Pegelanpassung vorzusehen.
+sensor:
+  - platform: sps30
+    id: sps30_component
+    address: 0x69
+    update_interval: 30s
+    idle_interval: 5min
+    pm_1_0:
+      name: "Feinstaub PM1"
+    pm_2_5:
+      name: "Feinstaub PM2.5"
+      id: pm_2_5
+    pm_4_0:
+      name: "Feinstaub PM4"
+    pm_10_0:
+      name: "Feinstaub PM10"
+      id: pm_10
+    pm_size:
+      name: "Feinstaub typische Partikelgröße"
+      entity_category: diagnostic
+
+button:
+  - platform: template
+    name: "SPS30 Lüfterreinigung starten"
+    icon: mdi:fan-alert
+    entity_category: config
+    on_press:
+      - sps30.start_fan_autoclean: sps30_component

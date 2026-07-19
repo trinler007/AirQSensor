@@ -1,0 +1,18 @@
+# Optionaler BMP390 auf dem vorhandenen I2C-Bus.
+# Der Druckwert wird dynamisch an den SCD41 zur Kompensation weitergegeben.
+sensor:
+  - platform: bmp3xx_i2c
+    address: 0x77
+    iir_filter: 16x
+    update_interval: 60s
+    temperature:
+      name: "BMP390 Temperatur"
+      entity_category: diagnostic
+      oversampling: 8x
+    pressure:
+      name: "Luftdruck"
+      id: ambient_pressure
+      oversampling: 16x
+      on_value:
+        then:
+          - lambda: id(scd41_component).set_ambient_pressure_compensation(x);

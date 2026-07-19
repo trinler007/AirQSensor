@@ -1,0 +1,38 @@
+# Optionaler realer Kältebrückenfühler auf GPIO4.
+# DS18B20 DATA mit etwa 4,7 kOhm nach 3,3 V ziehen.
+one_wire:
+  - platform: gpio
+    id: cold_bridge_one_wire
+    pin: GPIO4
+
+sensor:
+  - platform: dallas_temp
+    id: cold_bridge_temperature
+    name: "Kältebrückentemperatur"
+    one_wire_id: cold_bridge_one_wire
+    index: 0
+    resolution: 12
+    update_interval: 60s
+
+  - platform: template
+    id: measured_condensation_margin
+    name: "Gemessene Kondensationsreserve"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: |-
+      if (isnan(id(cold_bridge_temperature).state) || isnan(id(dew_point).state)) return {};
+      return id(cold_bridge_temperature).state - id(dew_point).state;
+
+binary_sensor:
+  - platform: template
+    name: "Kältebrücke Kondensationsrisiko"
+    device_class: problem
+    lambda: |-
+      if (isnan(id(measured_condensation_margin).state)) return {};
+      return id(measured_condensation_margin).state <= id(condensation_warning_limit).state;
+    filters:
+      - delayed_on: 2min
+      - delayed_off: 5min

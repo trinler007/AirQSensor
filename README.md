@@ -67,7 +67,13 @@ GPIO8 und GPIO9 sind auf dem ESP32-S3-DevKitC-1 frei nutzbar und liegen zusammen
 ├── fahrerhaus.yaml
 ├── common/air-quality.yaml
 ├── components/ze07_co/
+├── optional/
+│   ├── cold-bridge-ds18b20.yaml
+│   ├── bmp390.yaml
+│   ├── sps30.yaml
+│   └── status-indicators.yaml
 ├── home-assistant/automations.yaml
+├── home-assistant/templates.yaml
 └── secrets.example.yaml
 ```
 
@@ -75,7 +81,7 @@ Die lokale externe Komponente liest den aktiven 9-Byte-Datenrahmen des ZE07-CO, 
 
 Boarddefinition, WLAN, API-Verschlüsselung, OTA-Zugang und die authentifizierte Quelle der externen Komponente stehen bewusst separat in `wohnbereich.yaml` und `fahrerhaus.yaml`. Damit lassen sich Hardwarevarianten und Sicherheitsschlüssel je Gerät unabhängig verwalten. Sensoren, Busbelegung und Bewertungslogik werden als Remote-Package direkt aus `common/air-quality.yaml` auf GitHub geladen.
 
-Der serielle Logger läuft auf dem ESP32-S3-DevKitC-1 explizit über `UART0` (GPIO43/44). Der ZE07 verwendet unabhängig davon UART1 mit RX auf GPIO18. Alle Logstufen bis `VERY_VERBOSE` sind einkompiliert; nach jedem Start gilt `DEBUG`. Die Konfigurationsentität „Logger Level“ kann das globale Level in Home Assistant ohne Neustart ändern. `VERBOSE` und `VERY_VERBOSE` sind nur für kurze Diagnosen vorgesehen und werden bewusst nicht über einen Neustart hinweg gespeichert. Bei jeder Konfigurations- oder Funktionsänderung wird `esphome.project.version` in `common/air-quality.yaml` erhöht. Aktuelle Projektversion: `0.1.4`.
+Der serielle Logger läuft auf dem ESP32-S3-DevKitC-1 explizit über `UART0` (GPIO43/44). Der ZE07 verwendet unabhängig davon UART1 mit RX auf GPIO18. Alle Logstufen bis `VERY_VERBOSE` sind einkompiliert; nach jedem Start gilt `DEBUG`. Die Konfigurationsentität „Logger Level“ kann das globale Level in Home Assistant ohne Neustart ändern. `VERBOSE` und `VERY_VERBOSE` sind nur für kurze Diagnosen vorgesehen und werden bewusst nicht über einen Neustart hinweg gespeichert. Bei jeder Konfigurations- oder Funktionsänderung wird `esphome.project.version` in `common/air-quality.yaml` erhöht. Aktuelle Projektversion: `0.2.0`.
 
 Da das Repository privat ist, enthalten beide lokalen Geräte-YAMLs die Git-Zugangsdaten als `!secret`-Verweise sowohl beim Package als auch bei `external_components`. Dadurch reichen für ESPHome in Home Assistant die gewünschte Geräte-YAML und eine passende `secrets.yaml`; die Verzeichnisse `common/` und `components/` müssen nicht manuell kopiert werden. ESPHome prüft stündlich auf Änderungen des Branches `main`.
 
@@ -88,6 +94,10 @@ Für `github_password` ist ein Fine-grained GitHub Personal Access Token mit aus
 - CO-, VOC- und NOx-Trends als Änderung pro Minute
 - „Lüften empfohlen“, „Heizung oder Verbrennung auffällig“, „Mögliche Abgase“ und „CO Diagnosealarm“
 - UART-Diagnose: Verbindung, Framefehler und gemeldeter CO-Messbereich
+- Taupunkt, absolute Feuchte, geschätzte Kältebrückentemperatur und Kondensationsreserve
+- Datenalter je Sensor, zusammengefasster Sensorzustand und Warnung bei veralteten Messdaten
+- ZE07-Betriebsstunden mit einstellbarem Serviceintervall
+- freie/minimale Heap-Größe, maximale Schleifenzeit und letzter Reset-Grund
 - persistente Konfigurationswerte für alle Bewertungs- und Trendgrenzen
 - zur Laufzeit einstellbares globales Logger-Level
 - vollständige, natürlich formulierte „Luftqualität Bewertung“ für Sprachassistenten
@@ -108,6 +118,8 @@ Die Bewertungslogik kombiniert Absolutwerte und Ein-Minuten-Trends. Alle Grenzen
 | CO-Anstieg | 2 ppm/min | – | – |
 | VOC-Anstieg | 5 Indexpunkte/min | – | – |
 | NOx-Anstieg | 2 Indexpunkte/min | – | – |
+| geschätzte Kondensationsreserve | unter 3 K | unter 0 K | möglichst über 3 K |
+| maximale Messwertalterung | 120 s | – | darunter |
 
 Die VOC- und NOx-Grenzen sind bewusst anpassbare Diagnose-Startwerte. Nach Sensirion entspricht VOC Index 100 der mittleren Gaszusammensetzung der vergangenen 24 Stunden; beim NOx Index wird der adaptive Normalzustand auf 1 abgebildet. Die Indizes sind daher relative Ereignissignale und keine Konzentrationen oder allgemeingültigen Gesundheitsgrenzwerte. Die Reihenfolge der jeweils niedrigen und hohen Grenzwerte muss beim Anpassen erhalten bleiben.
 
@@ -117,6 +129,54 @@ Der Textsensor „Luftqualität Bewertung“ nennt Gesamtstufe, Messwert und Ein
 
 Die zusätzliche „Luftqualität Kurzbewertung“ nennt bei guter Luft nur die Gesamtbewertung. Bei Abweichungen folgen ausschließlich Werte, die die Gesamtstufe verschlechtern, zum Beispiel: „Die Luftqualität im Wohnbereich ist auffällig. Auffällig: Kohlendioxid 1350 ppm; Feuchte 68 Prozent.“ Aktive Abgas- oder Verbrennungstrends werden ebenfalls knapp genannt.
 
+### Kondensation und Wartung
+
+Ohne externen Oberflächenfühler schätzt das Basispaket die Temperatur einer Kältebrücke als Raumtemperatur minus einer in Home Assistant einstellbaren Differenz. Aus dieser Temperatur und dem berechneten Taupunkt entsteht die „Geschätzte Kondensationsreserve“. Werte unter 3 K lösen eine Warnung aus, Werte unter 0 K bedeuten rechnerisch Kondensation. Das ist ein Diagnosemodell: Für bekannte kalte Stellen sollte die Differenz mit realen Messungen abgeglichen oder das optionale DS18B20-Paket verwendet werden.
+
+„Messdaten aktuell“ wird nur aktiv, wenn SCD41, SGP41 und ZE07 innerhalb des konfigurierten Zeitfensters gültige Daten geliefert haben. Der Textsensor „Sensorzustand“ nennt konkret die fehlende oder überalterte Quelle. Die ZE07-Betriebszeit wird in Sechs-Stunden-Schritten verschleißarm im Flash gesichert; der Startwert für die Serviceerinnerung beträgt drei Jahre. Die Erinnerung ersetzt weder Funktionsprüfung noch die Herstellerangaben zur Sensorlebensdauer.
+
+Die standardmäßig deaktivierten Wartungsschaltflächen erlauben eine kontrollierte SCD41-Zwangskalibrierung, einen SCD41-Werksreset und das Zurücksetzen der ZE07-Betriebsstunden. Vor einer Zwangskalibrierung muss der SCD41 mindestens drei Minuten in einer homogenen Umgebung mit verlässlich bekannter CO₂-Konzentration laufen. Ein Werksreset löscht die Kalibrierdaten des SCD41 und darf nicht als allgemeine Fehlerbehebung ausgelöst werden.
+
+## Optionale Hardwarepakete
+
+Die Pakete unter `optional/` werden nicht automatisch geladen. Nur tatsächlich vorhandene Hardware darf in der Geräte-YAML ergänzt werden. Bei der aktuellen privaten GitHub-Package-Konfiguration werden die gewünschten Dateien einfach der bestehenden `files`-Liste hinzugefügt:
+
+```yaml
+packages:
+  air_quality:
+    url: https://github.com/trinler007/AirQSensor
+    username: !secret github_username
+    password: !secret github_password
+    ref: main
+    files:
+      - common/air-quality.yaml
+      # Nur bei eingebauter Hardware aktivieren:
+      - optional/cold-bridge-ds18b20.yaml
+      - optional/bmp390.yaml
+      - optional/sps30.yaml
+      - optional/status-indicators.yaml
+    refresh: 1h
+```
+
+| Paket | Zusatzhardware und Anschluss | Funktion |
+|---|---|---|
+| `cold-bridge-ds18b20.yaml` | DS18B20 DATA an GPIO4, 4,7-kΩ-Pull-up nach 3,3 V | reale Oberflächentemperatur und gemessene Kondensationsreserve |
+| `bmp390.yaml` | BMP390 an I²C GPIO8/9 und 3,3 V, Standardadresse `0x77` | Luftdruck und laufende Druckkompensation des SCD41 |
+| `sps30.yaml` | SPS30 an I²C GPIO8/9 und 5 V; `SEL` auf GND | PM1/PM2,5/PM4/PM10, Partikelgröße und manuelle Lüfterreinigung |
+| `status-indicators.yaml` | eine WS2812-Datenleitung an GPIO6; aktiver Buzzer über Transistor an GPIO7 | grün normal, blau Sensorfehler, gelb Lüften/Kondensation, rot Alarm |
+
+Alle Zusatzmodule benötigen eine gemeinsame Masse. Beim SPS30 müssen SDA/SCL sicher auf 3,3-V-Pegel begrenzt sein; keine 5-V-I²C-Pull-ups mit dem ESP32 verbinden. Für eine mit 5 V versorgte WS2812 ist ein 3,3-V-zu-5-V-Pegelwandler empfehlenswert. Den Buzzer nicht direkt aus einem GPIO speisen, sondern passend zu dessen Stromaufnahme über Transistor und gegebenenfalls Freilaufdiode schalten.
+
+### Messpunktübergreifende Home-Assistant-Auswertung
+
+`home-assistant/templates.yaml` enthält eine zusätzliche Diagnose, die Wohnbereich und Fahrerhaus vergleicht. Sind beide Messpunkte gleichzeitig auffällig, spricht das eher für eine gemeinsame Quelle oder Außenluft; ist nur ein Bereich betroffen, nennt der Textsensor diesen als wahrscheinliche lokale Quelle. Nach dem Kopieren in den Home-Assistant-Konfigurationsordner kann die Datei beispielsweise so eingebunden werden:
+
+```yaml
+template: !include home-assistant/templates.yaml
+```
+
+Die Entity-IDs in der Datei sind auf die mitgelieferten Gerätenamen ausgelegt und müssen nach der ersten Einbindung mit den tatsächlich von Home Assistant erzeugten IDs abgeglichen werden.
+
 ## Inbetriebnahme
 
 1. `secrets.example.yaml` als `secrets.yaml` kopieren und Zugangsdaten einsetzen. `github_password` erhält ein auf dieses Repository beschränktes Fine-grained GitHub-Lesetoken. Wohnbereich und Fahrerhaus verwenden getrennte API-Schlüssel sowie getrennte OTA- und Fallback-Passwörter; WLAN- und GitHub-Zugang sind standardmäßig gemeinsam.
@@ -125,7 +185,7 @@ Die zusätzliche „Luftqualität Kurzbewertung“ nennt bei guter Luft nur die 
 4. Konfiguration validieren: `esphome config wohnbereich.yaml` und `esphome config fahrerhaus.yaml`.
 5. Erstinstallation per USB: `esphome run wohnbereich.yaml` beziehungsweise `esphome run fahrerhaus.yaml`.
 6. Beide Geräte in Home Assistant übernehmen und die Messwerte mehrere Tage vergleichen.
-7. Die Beispiele aus `home-assistant/automations.yaml` in Home Assistant übernehmen und `notify.mobile_app_MEIN_TELEFON` sowie gegebenenfalls die Entity-IDs anpassen.
+7. Die Beispiele aus `home-assistant/automations.yaml` und bei Bedarf `home-assistant/templates.yaml` in Home Assistant übernehmen und `notify.mobile_app_MEIN_TELEFON` sowie die Entity-IDs anpassen. Enthalten sind Meldungen für CO, mögliche Abgase, fehlende Sensordaten, anhaltendes Kondensationsrisiko und das ZE07-Serviceintervall.
 
 SCD41 und SGP41 benötigen geeignete Einlauf- und Betriebsbedingungen. Automatische SCD41-Selbstkalibrierung ist nur sinnvoll, wenn der Sensor regelmäßig über längere Zeit Frischluftniveau sieht. Im dauerhaft bewohnten oder selten gelüfteten Fahrzeug sollte ASC geprüft und gegebenenfalls deaktiviert sowie kontrolliert zwangskalibriert werden. Der ZE07-CO benötigt laut Hersteller bis zu drei Minuten Aufwärmzeit und hat eine typische Sensorlebensdauer von 3–5 Jahren in Luft.
 
@@ -138,7 +198,7 @@ SCD41 und SGP41 benötigen geeignete Einlauf- und Betriebsbedingungen. Automatis
 - USB-C zugänglich; Sensoröffnungen nicht mit Kleber oder Lack verschließen
 - nicht in Toträumen montieren und nicht so nah an der Heizung, dass nur lokale Hitze statt Raumluft gemessen wird
 
-Optional lassen sich später Feinstaub, Luftdruck, Helligkeit, Buzzer oder eine WS2812-Status-LED ergänzen.
+Feinstaub, Luftdruck, reale Kältebrückentemperatur, Buzzer und WS2812-Status-LED sind über die beschriebenen optionalen Pakete vorbereitet. Helligkeit bleibt eine mögliche spätere Erweiterung.
 
 ## Quellen
 
@@ -146,7 +206,13 @@ Optional lassen sich später Feinstaub, Luftdruck, Helligkeit, Buzzer oder eine 
 - [ESPHome SGP4X](https://esphome.io/components/sensor/sgp4x/)
 - [ESPHome Template Number](https://esphome.io/components/number/template/)
 - [ESPHome Logger und Logger Select](https://esphome.io/components/logger/)
+- [ESPHome Debug-Komponente](https://esphome.io/components/debug/)
 - [ESPHome UART](https://esphome.io/components/uart/)
+- [ESPHome DS18B20](https://esphome.io/components/sensor/dallas_temp/)
+- [ESPHome BMP3XX](https://esphome.io/components/sensor/bmp3xx/)
+- [ESPHome SPS30](https://esphome.io/components/sensor/sps30/)
+- [ESPHome ESP32-RMT-LED-Strip](https://esphome.io/components/light/esp32_rmt_led_strip/)
+- [Sensirion SPS30 Produktseite](https://sensirion.com/products/catalog/SPS30)
 - [Sensirion SGP41 Datenblatt und Interpretation der Gasindizes](https://sensirion.com/media/documents/5FE8673C/61E96F50/Sensirion_Gas_Sensors_Datasheet_SGP41.pdf)
 - [Umweltbundesamt: CO₂-Leitwerte für Innenräume](https://www.umweltbundesamt.de/richtig-lueften-in-schulen)
 - [Umweltbundesamt: empfohlene relative Luftfeuchte](https://www.umweltbundesamt.de/en/node/3086)

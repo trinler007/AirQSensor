@@ -1,0 +1,40 @@
+# Unter `template: !include home-assistant/templates.yaml` einbinden.
+# Entity-IDs nach der tatsächlichen Benennung in Home Assistant prüfen.
+- sensor:
+    - name: "AirQ Quellenhinweis"
+      unique_id: airq_quellenhinweis
+      icon: mdi:source-branch
+      state: >-
+        {% set w_abgas = is_state('binary_sensor.airq_wohnbereich_mogliche_abgase', 'on') %}
+        {% set f_abgas = is_state('binary_sensor.airq_fahrerhaus_mogliche_abgase', 'on') %}
+        {% set w_verbrennung = is_state('binary_sensor.airq_wohnbereich_heizung_oder_verbrennung_auffallig', 'on') %}
+        {% set f_verbrennung = is_state('binary_sensor.airq_fahrerhaus_heizung_oder_verbrennung_auffallig', 'on') %}
+        {% set w_lueften = is_state('binary_sensor.airq_wohnbereich_luften_empfohlen', 'on') %}
+        {% set f_lueften = is_state('binary_sensor.airq_fahrerhaus_luften_empfohlen', 'on') %}
+        {% if w_abgas and f_abgas %}
+          Abgasindikatoren an beiden Messpunkten auffällig
+        {% elif w_abgas or w_verbrennung %}
+          Lokale Verbrennungs- oder Abgasquelle im Wohnbereich möglich
+        {% elif f_abgas or f_verbrennung %}
+          Lokale Verbrennungs- oder Abgasquelle im Fahrerhaus möglich
+        {% elif w_lueften and f_lueften %}
+          Gesamte Innenraumluft auffällig
+        {% elif w_lueften %}
+          Lokale Luftbelastung im Wohnbereich möglich
+        {% elif f_lueften %}
+          Lokale Luftbelastung im Fahrerhaus möglich
+        {% else %}
+          Kein gemeinsames auffälliges Muster
+        {% endif %}
+
+- binary_sensor:
+    - name: "AirQ beide Messpunkte auffällig"
+      unique_id: airq_beide_messpunkte_auffaellig
+      device_class: problem
+      state: >-
+        {{
+          (is_state('binary_sensor.airq_wohnbereich_mogliche_abgase', 'on') and
+           is_state('binary_sensor.airq_fahrerhaus_mogliche_abgase', 'on')) or
+          (is_state('binary_sensor.airq_wohnbereich_luften_empfohlen', 'on') and
+           is_state('binary_sensor.airq_fahrerhaus_luften_empfohlen', 'on'))
+        }}

@@ -17,6 +17,11 @@ substitutions:
   co_rise_default: "2.0"
   voc_rise_default: "5.0"
   nox_rise_default: "2.0"
+  cold_bridge_offset_default: "5.0"
+  condensation_warning_default: "3.0"
+  sensor_stale_default: "120.0"
+  ze07_service_hours_default: "26280.0"
+  scd41_calibration_reference_default: "426.0"
 
 esphome:
   name: ${device_name}
@@ -25,7 +30,7 @@ esphome:
   min_version: 2026.7.0
   project:
     name: trinler.airq_sensor
-    version: "0.1.4"
+    version: "0.2.0"
 
 logger:
   # Alle Stufen werden einkompiliert, der sichere Startwert bleibt DEBUG.
@@ -54,6 +59,30 @@ uart:
   parity: NONE
   stop_bits: 1
   rx_buffer_size: 256
+
+debug:
+  update_interval: 60s
+
+globals:
+  - id: last_scd41_update_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "0"
+
+  - id: last_sgp41_update_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "0"
+
+  - id: last_ze07_update_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "0"
+
+  - id: ze07_operating_hours_total
+    type: float
+    restore_value: true
+    initial_value: "0.0"
 
 # Persistente Diagnosegrenzen. Aenderungen in Home Assistant bleiben nach
 # einem Neustart erhalten. Es handelt sich nicht um zertifizierte Alarmwerte.
@@ -261,6 +290,76 @@ number:
     restore_value: true
     mode: box
 
+  - platform: template
+    name: "Kältebrücke Temperaturdifferenz"
+    id: cold_bridge_offset_limit
+    unit_of_measurement: "°C"
+    device_class: temperature
+    entity_category: config
+    min_value: 0
+    max_value: 20
+    step: 0.5
+    initial_value: ${cold_bridge_offset_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Kondensationsreserve Warnung"
+    id: condensation_warning_limit
+    unit_of_measurement: "°C"
+    device_class: temperature
+    entity_category: config
+    min_value: 0.5
+    max_value: 10
+    step: 0.5
+    initial_value: ${condensation_warning_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "Messdaten veraltet nach"
+    id: sensor_stale_limit
+    unit_of_measurement: "s"
+    device_class: duration
+    entity_category: config
+    min_value: 60
+    max_value: 600
+    step: 30
+    initial_value: ${sensor_stale_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "ZE07 Wartungsintervall"
+    id: ze07_service_hours_limit
+    unit_of_measurement: "h"
+    device_class: duration
+    entity_category: config
+    min_value: 8760
+    max_value: 43800
+    step: 720
+    initial_value: ${ze07_service_hours_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
+  - platform: template
+    name: "SCD41 Kalibrierreferenz"
+    id: scd41_calibration_reference
+    unit_of_measurement: "ppm"
+    device_class: carbon_dioxide
+    entity_category: config
+    min_value: 400
+    max_value: 1000
+    step: 1
+    initial_value: ${scd41_calibration_reference_default}
+    optimistic: true
+    restore_value: true
+    mode: box
+
 select:
   - platform: logger
     name: "Logger Level"
@@ -278,6 +377,9 @@ sensor:
       name: "CO₂"
       id: co2
       accuracy_decimals: 0
+      on_value:
+        then:
+          - lambda: id(last_scd41_update_ms) = millis();
     temperature:
       name: "Temperatur"
       id: temperature
@@ -296,6 +398,9 @@ sensor:
       name: "VOC Index"
       id: voc_index
       accuracy_decimals: 0
+      on_value:
+        then:
+          - lambda: id(last_sgp41_update_ms) = millis();
     nox:
       name: "NOx Index"
       id: nox_index
@@ -312,6 +417,9 @@ sensor:
       id: co
       filters:
         - throttle_average: 10s
+      on_value:
+        then:
+          - lambda: id(last_ze07_update_ms) = millis();
     full_scale:
       name: "CO Messbereich"
       entity_category: diagnostic
@@ -328,6 +436,118 @@ sensor:
     name: "Uptime"
     update_interval: 60s
     entity_category: diagnostic
+
+  - platform: debug
+    free:
+      name: "Freier Heap"
+      entity_category: diagnostic
+    min_free:
+      name: "Minimaler freier Heap"
+      entity_category: diagnostic
+    loop_time:
+      name: "Maximale Loop-Zeit"
+      entity_category: diagnostic
+
+  - platform: template
+    name: "Taupunkt"
+    id: dew_point
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: |-
+      const float t = id(temperature).state;
+      const float rh = id(humidity).state;
+      if (isnan(t) || isnan(rh) || rh <= 0.0f || rh > 100.0f) return {};
+      const float gamma = logf(rh / 100.0f) + (17.62f * t) / (243.12f + t);
+      return (243.12f * gamma) / (17.62f - gamma);
+
+  - platform: template
+    name: "Absolute Luftfeuchte"
+    id: absolute_humidity
+    unit_of_measurement: "g/m³"
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: |-
+      const float t = id(temperature).state;
+      const float rh = id(humidity).state;
+      if (isnan(t) || isnan(rh) || rh < 0.0f || rh > 100.0f) return {};
+      const float saturation = 6.112f * expf((17.62f * t) / (243.12f + t));
+      return 216.7f * (saturation * rh / 100.0f) / (273.15f + t);
+
+  - platform: template
+    name: "Geschätzte Kältebrückentemperatur"
+    id: estimated_cold_bridge_temperature
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: |-
+      if (isnan(id(temperature).state)) return {};
+      return id(temperature).state - id(cold_bridge_offset_limit).state;
+
+  - platform: template
+    name: "Geschätzte Kondensationsreserve"
+    id: condensation_margin
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 30s
+    lambda: |-
+      if (isnan(id(estimated_cold_bridge_temperature).state) ||
+          isnan(id(dew_point).state)) return {};
+      return id(estimated_cold_bridge_temperature).state - id(dew_point).state;
+
+  - platform: template
+    name: "Alter SCD41 Messdaten"
+    id: scd41_data_age
+    unit_of_measurement: "s"
+    device_class: duration
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: |-
+      if (id(last_scd41_update_ms) == 0) return {};
+      return (uint32_t) (millis() - id(last_scd41_update_ms)) / 1000.0f;
+
+  - platform: template
+    name: "Alter SGP41 Messdaten"
+    id: sgp41_data_age
+    unit_of_measurement: "s"
+    device_class: duration
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: |-
+      if (id(last_sgp41_update_ms) == 0) return {};
+      return (uint32_t) (millis() - id(last_sgp41_update_ms)) / 1000.0f;
+
+  - platform: template
+    name: "Alter ZE07 Messdaten"
+    id: ze07_data_age
+    unit_of_measurement: "s"
+    device_class: duration
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: |-
+      if (id(last_ze07_update_ms) == 0) return {};
+      return (uint32_t) (millis() - id(last_ze07_update_ms)) / 1000.0f;
+
+  - platform: template
+    name: "ZE07 Betriebsstunden"
+    id: ze07_operating_hours
+    unit_of_measurement: "h"
+    device_class: duration
+    state_class: total_increasing
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: return id(ze07_operating_hours_total);
 
   # Ein-Minuten-Differenzen als leicht verständliche Trendindikatoren.
   - platform: template
@@ -384,7 +604,42 @@ binary_sensor:
     ze07_co_id: ze07_component
     connected:
       name: "CO Sensor verbunden"
+      id: ze07_connected
       entity_category: diagnostic
+
+  - platform: template
+    name: "Messdaten aktuell"
+    id: sensor_data_healthy
+    device_class: connectivity
+    entity_category: diagnostic
+    lambda: |-
+      if (isnan(id(scd41_data_age).state) || isnan(id(sgp41_data_age).state) ||
+          isnan(id(ze07_data_age).state)) return {};
+      return id(scd41_data_age).state <= id(sensor_stale_limit).state &&
+             id(sgp41_data_age).state <= id(sensor_stale_limit).state &&
+             id(ze07_data_age).state <= id(sensor_stale_limit).state &&
+             id(ze07_connected).state;
+    filters:
+      - delayed_on: 10s
+      - delayed_off: 10s
+
+  - platform: template
+    name: "Kondensationsrisiko"
+    id: condensation_risk
+    device_class: problem
+    lambda: |-
+      if (isnan(id(condensation_margin).state)) return {};
+      return id(condensation_margin).state <= id(condensation_warning_limit).state;
+    filters:
+      - delayed_on: 2min
+      - delayed_off: 5min
+
+  - platform: template
+    name: "ZE07 Wartung fällig"
+    id: ze07_service_due
+    device_class: problem
+    entity_category: diagnostic
+    lambda: return id(ze07_operating_hours_total) >= id(ze07_service_hours_limit).state;
 
   - platform: template
     name: "Lüften empfohlen"
@@ -450,6 +705,11 @@ text_sensor:
           isnan(id(voc_index).state) || isnan(id(nox_index).state) ||
           isnan(id(temperature).state) || isnan(id(humidity).state))
         return {"Die Luftqualität ${assessment_location} wird noch ermittelt. Es fehlen gültige Messwerte."};
+      if ((!isnan(id(scd41_data_age).state) && id(scd41_data_age).state > id(sensor_stale_limit).state) ||
+          (!isnan(id(sgp41_data_age).state) && id(sgp41_data_age).state > id(sensor_stale_limit).state) ||
+          (!isnan(id(ze07_data_age).state) && id(ze07_data_age).state > id(sensor_stale_limit).state) ||
+          !id(ze07_connected).state)
+        return {"Die Luftqualität ${assessment_location} kann nicht zuverlässig bewertet werden. Sensordaten fehlen oder sind veraltet."};
 
       const float co_value = id(co).state;
       const float co2_value = id(co2).state;
@@ -515,6 +775,14 @@ text_sensor:
         if (severity < 1) severity = 1;
       }
 
+      if (!isnan(id(condensation_margin).state)) {
+        if (id(condensation_margin).state <= 0.0f) {
+          if (severity < 3) severity = 3;
+        } else if (id(condensation_margin).state <= id(condensation_warning_limit).state) {
+          if (severity < 2) severity = 2;
+        }
+      }
+
       if (co_value >= id(co_alarm_limit).state) {
         recommendation = "sofort lüften, Heizungen aus und Ursache prüfen";
         severity = 4;
@@ -530,6 +798,9 @@ text_sensor:
                  voc_value >= id(voc_elevated_limit).state ||
                  nox_value >= id(nox_elevated_limit).state) {
         recommendation = "jetzt lüften";
+      } else if (!isnan(id(condensation_margin).state) &&
+                 id(condensation_margin).state <= id(condensation_warning_limit).state) {
+        recommendation = "Kältebrücken prüfen und Feuchte reduzieren";
       } else if (temperature_value < id(temperature_min_limit).state ||
                  temperature_value > id(temperature_max_limit).state ||
                  humidity_value < id(humidity_min_limit).state ||
@@ -560,6 +831,11 @@ text_sensor:
           isnan(id(voc_index).state) || isnan(id(nox_index).state) ||
           isnan(id(temperature).state) || isnan(id(humidity).state))
         return {"Die Luftqualität ${assessment_location} wird noch ermittelt."};
+      if ((!isnan(id(scd41_data_age).state) && id(scd41_data_age).state > id(sensor_stale_limit).state) ||
+          (!isnan(id(sgp41_data_age).state) && id(sgp41_data_age).state > id(sensor_stale_limit).state) ||
+          (!isnan(id(ze07_data_age).state) && id(ze07_data_age).state > id(sensor_stale_limit).state) ||
+          !id(ze07_connected).state)
+        return {"Die Luftqualität ${assessment_location} ist derzeit nicht zuverlässig bewertbar. Sensordaten fehlen."};
 
       std::string negative_values;
       auto add_value = [&negative_values](const std::string &value) {
@@ -612,6 +888,16 @@ text_sensor:
         if (severity < 1) severity = 1;
       }
 
+      if (!isnan(id(condensation_margin).state) &&
+          id(condensation_margin).state <= id(condensation_warning_limit).state) {
+        add_value(str_sprintf("Kondensationsreserve %.1f Grad", id(condensation_margin).state));
+        if (id(condensation_margin).state <= 0.0f) {
+          if (severity < 3) severity = 3;
+        } else if (severity < 2) {
+          severity = 2;
+        }
+      }
+
       if (id(possible_exhaust).state) {
         add_value("Abgastrend aktiv");
         severity = 4;
@@ -631,6 +917,33 @@ text_sensor:
       return {str_sprintf("Die Luftqualität ${assessment_location} ist %s. Auffällig: %s.",
                           overall_text, negative_values.c_str())};
 
+  - platform: template
+    name: "Sensorzustand"
+    icon: mdi:check-network-outline
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      std::string problems;
+      auto add_problem = [&problems](const char *problem) {
+        if (!problems.empty()) problems += "; ";
+        problems += problem;
+      };
+      if (isnan(id(scd41_data_age).state)) add_problem("SCD41 startet");
+      else if (id(scd41_data_age).state > id(sensor_stale_limit).state) add_problem("SCD41 Daten veraltet");
+      if (isnan(id(sgp41_data_age).state)) add_problem("SGP41 startet");
+      else if (id(sgp41_data_age).state > id(sensor_stale_limit).state) add_problem("SGP41 Daten veraltet");
+      if (!id(ze07_connected).state) add_problem("ZE07 nicht verbunden");
+      else if (isnan(id(ze07_data_age).state)) add_problem("ZE07 startet");
+      else if (id(ze07_data_age).state > id(sensor_stale_limit).state) add_problem("ZE07 Daten veraltet");
+      if (id(ze07_service_due).state) add_problem("ZE07 Wartung fällig");
+      if (problems.empty()) return {"Alle Sensoren liefern aktuelle Daten."};
+      return {"Sensorprüfung: " + problems + "."};
+
+  - platform: debug
+    reset_reason:
+      name: "Neustartursache"
+      entity_category: diagnostic
+
   - platform: version
     name: "ESPHome Version"
     entity_category: diagnostic
@@ -639,3 +952,38 @@ button:
   - platform: restart
     name: "Neustart"
     entity_category: diagnostic
+
+  - platform: template
+    name: "SCD41 Zwangskalibrierung"
+    icon: mdi:tune-vertical
+    entity_category: config
+    disabled_by_default: true
+    on_press:
+      - scd4x.perform_forced_calibration:
+          id: scd41_component
+          value: !lambda return (uint16_t) id(scd41_calibration_reference).state;
+
+  - platform: template
+    name: "SCD41 Werkseinstellungen"
+    icon: mdi:restore-alert
+    entity_category: config
+    disabled_by_default: true
+    on_press:
+      - scd4x.factory_reset: scd41_component
+
+  - platform: template
+    name: "ZE07 Betriebsstunden zurücksetzen"
+    icon: mdi:timer-refresh-outline
+    entity_category: config
+    disabled_by_default: true
+    on_press:
+      - lambda: id(ze07_operating_hours_total) = 0.0f;
+
+interval:
+  - interval: 6h
+    then:
+      - if:
+          condition:
+            binary_sensor.is_on: ze07_connected
+          then:
+            - lambda: id(ze07_operating_hours_total) += 6.0f;
