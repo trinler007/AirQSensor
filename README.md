@@ -81,7 +81,7 @@ Die lokale externe Komponente liest den aktiven 9-Byte-Datenrahmen des ZE07-CO, 
 
 Boarddefinition, WLAN, API-Verschlüsselung, OTA-Zugang und die authentifizierte Quelle der externen Komponente stehen bewusst separat in `wohnbereich.yaml` und `fahrerhaus.yaml`. Damit lassen sich Hardwarevarianten und Sicherheitsschlüssel je Gerät unabhängig verwalten. Sensoren, Busbelegung und Bewertungslogik werden als Remote-Package direkt aus `common/air-quality.yaml` auf GitHub geladen.
 
-Der serielle Logger läuft auf dem ESP32-S3-DevKitC-1 explizit über `UART0` (GPIO43/44). Der ZE07 verwendet unabhängig davon UART1 mit RX auf GPIO18. Alle Logstufen bis `VERY_VERBOSE` sind einkompiliert; nach jedem Start gilt `DEBUG`. Die Konfigurationsentität „Logger Level“ kann das globale Level in Home Assistant ohne Neustart ändern. `VERBOSE` und `VERY_VERBOSE` sind nur für kurze Diagnosen vorgesehen und werden bewusst nicht über einen Neustart hinweg gespeichert. Bei jeder Konfigurations- oder Funktionsänderung wird `esphome.project.version` in `common/air-quality.yaml` erhöht. Aktuelle Projektversion: `0.2.0`.
+Der serielle Logger läuft auf dem ESP32-S3-DevKitC-1 explizit über `UART0` (GPIO43/44). Der ZE07 verwendet unabhängig davon UART1 mit RX auf GPIO18. Alle Logstufen bis `VERY_VERBOSE` sind einkompiliert; nach jedem Start gilt `DEBUG`. Die Konfigurationsentität „Logger Level“ kann das globale Level in Home Assistant ohne Neustart ändern. `VERBOSE` und `VERY_VERBOSE` sind nur für kurze Diagnosen vorgesehen und werden bewusst nicht über einen Neustart hinweg gespeichert. Bei jeder Konfigurations- oder Funktionsänderung wird `esphome.project.version` in `common/air-quality.yaml` erhöht. Aktuelle Projektversion: `0.2.1`.
 
 Da das Repository privat ist, enthalten beide lokalen Geräte-YAMLs die Git-Zugangsdaten als `!secret`-Verweise sowohl beim Package als auch bei `external_components`. Dadurch reichen für ESPHome in Home Assistant die gewünschte Geräte-YAML und eine passende `secrets.yaml`; die Verzeichnisse `common/` und `components/` müssen nicht manuell kopiert werden. ESPHome prüft stündlich auf Änderungen des Branches `main`.
 
@@ -100,6 +100,7 @@ Für `github_password` ist ein Fine-grained GitHub Personal Access Token mit aus
 - freie/minimale Heap-Größe, maximale Schleifenzeit und letzter Reset-Grund
 - persistente Konfigurationswerte für alle Bewertungs- und Trendgrenzen
 - zur Laufzeit einstellbares globales Logger-Level
+- manuell steuerbare Board-RGB-LED mit getrennt aktivierbarer Warn- und Alarmanzeige
 - vollständige, natürlich formulierte „Luftqualität Bewertung“ für Sprachassistenten
 - kompakte „Luftqualität Kurzbewertung“ mit Gesamtstufe und nur den negativ beitragenden Werten
 
@@ -163,9 +164,22 @@ packages:
 | `cold-bridge-ds18b20.yaml` | DS18B20 DATA an GPIO4, 4,7-kΩ-Pull-up nach 3,3 V | reale Oberflächentemperatur und gemessene Kondensationsreserve |
 | `bmp390.yaml` | BMP390 an I²C GPIO8/9 und 3,3 V, Standardadresse `0x77` | Luftdruck und laufende Druckkompensation des SCD41 |
 | `sps30.yaml` | SPS30 an I²C GPIO8/9 und 5 V; `SEL` auf GND | PM1/PM2,5/PM4/PM10, Partikelgröße und manuelle Lüfterreinigung |
-| `status-indicators.yaml` | eine WS2812-Datenleitung an GPIO6; aktiver Buzzer über Transistor an GPIO7 | grün normal, blau Sensorfehler, gelb Lüften/Kondensation, rot Alarm |
+| `status-indicators.yaml` | aktiver Buzzer über Transistor an GPIO7 | optionaler akustischer CO-/Abgasalarm und gemeinsamer Test mit der Board-RGB-LED |
 
-Alle Zusatzmodule benötigen eine gemeinsame Masse. Beim SPS30 müssen SDA/SCL sicher auf 3,3-V-Pegel begrenzt sein; keine 5-V-I²C-Pull-ups mit dem ESP32 verbinden. Für eine mit 5 V versorgte WS2812 ist ein 3,3-V-zu-5-V-Pegelwandler empfehlenswert. Den Buzzer nicht direkt aus einem GPIO speisen, sondern passend zu dessen Stromaufnahme über Transistor und gegebenenfalls Freilaufdiode schalten.
+Alle Zusatzmodule benötigen eine gemeinsame Masse. Beim SPS30 müssen SDA/SCL sicher auf 3,3-V-Pegel begrenzt sein; keine 5-V-I²C-Pull-ups mit dem ESP32 verbinden. Den Buzzer nicht direkt aus einem GPIO speisen, sondern passend zu dessen Stromaufnahme über Transistor und gegebenenfalls Freilaufdiode schalten.
+
+### LEDs auf dem ESP32-S3-DevKitC-1
+
+Die rote LED des Boards ist die direkt an der 3,3-V-Versorgung angeschlossene Betriebsanzeige. Sie besitzt keinen steuerbaren GPIO und kann deshalb nicht per ESPHome ausgeschaltet werden. Für einen dunklen Nachtbetrieb kann sie reversibel mit lichtdichtem Elektronik- oder Polyimidband abgedeckt werden. Das Entfernen der LED oder ihres Vorwiderstands ist eine Hardwareänderung und sollte nur bei entsprechender Lötpraxis erfolgen.
+
+Die adressierbare Board-RGB-LED erscheint in Home Assistant als „Board RGB-LED“ und kann dort einschließlich Farbe und Helligkeit manuell gesteuert werden. Im Normalbetrieb und nach jedem Start bleibt sie aus; es gibt ausdrücklich keine grüne „Gut“-Anzeige. Zwei standardmäßig ausgeschaltete Konfigurationsschalter aktivieren bei Bedarf die automatische Anzeige:
+
+- „RGB Warnanzeige automatisch“: blau bei fehlenden Sensordaten, orange bei Lüftungs-, Verbrennungs-, Kondensations- oder Servicewarnungen
+- „RGB Alarmanzeige automatisch“: rot bei CO-Diagnosealarm oder möglichem Abgastrend
+
+Warn- und Alarmhelligkeit sind getrennt in Home Assistant einstellbar. Nach Ende einer automatischen Anzeige wird die LED wieder ausgeschaltet. Solange keine Automatik aktiv ist, bleibt eine manuell gewählte Farbe erhalten.
+
+Bei der ersten Boardrevision liegt die RGB-LED auf GPIO48, bei DevKitC-1 v1.1 auf GPIO38. Deshalb enthalten `wohnbereich.yaml` und `fahrerhaus.yaml` die Substitution `onboard_rgb_pin`. Steht auf der Platine `v1.1`, muss sie vor dem Kompilieren auf `GPIO38` geändert werden; andernfalls bleibt der voreingestellte `GPIO48` bestehen.
 
 ### Messpunktübergreifende Home-Assistant-Auswertung
 
@@ -198,7 +212,7 @@ SCD41 und SGP41 benötigen geeignete Einlauf- und Betriebsbedingungen. Automatis
 - USB-C zugänglich; Sensoröffnungen nicht mit Kleber oder Lack verschließen
 - nicht in Toträumen montieren und nicht so nah an der Heizung, dass nur lokale Hitze statt Raumluft gemessen wird
 
-Feinstaub, Luftdruck, reale Kältebrückentemperatur, Buzzer und WS2812-Status-LED sind über die beschriebenen optionalen Pakete vorbereitet. Helligkeit bleibt eine mögliche spätere Erweiterung.
+Feinstaub, Luftdruck, reale Kältebrückentemperatur und Buzzer sind über die beschriebenen optionalen Pakete vorbereitet. Die eingebaute RGB-LED gehört bereits zum Basispaket. Ein zusätzlicher Helligkeitssensor bleibt eine mögliche spätere Erweiterung.
 
 ## Quellen
 

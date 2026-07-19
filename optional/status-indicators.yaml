@@ -1,16 +1,5 @@
-# Optionale lokale Statusausgabe:
-# - eine WS2812 an GPIO6 (5 V, gemeinsame Masse, 3,3->5-V-Pegelwandler empfohlen)
-# - aktiver Buzzer an GPIO7 ueber Transistorstufe, nicht direkt am GPIO betreiben
-light:
-  - platform: esp32_rmt_led_strip
-    id: local_status_led
-    name: "Lokale Status-LED"
-    pin: GPIO6
-    num_leds: 1
-    rgb_order: GRB
-    chipset: WS2812
-    restore_mode: ALWAYS_OFF
-
+# Optionaler aktiver Buzzer an GPIO7 über eine geeignete Transistorstufe.
+# Die RGB-Anzeige nutzt die bereits im Basispaket konfigurierte Board-LED.
 switch:
   - platform: gpio
     id: local_buzzer_output
@@ -24,7 +13,7 @@ switch:
     icon: mdi:volume-high
     entity_category: config
     optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
+    restore_mode: RESTORE_DEFAULT_OFF
 
 button:
   - platform: template
@@ -33,11 +22,11 @@ button:
     entity_category: config
     on_press:
       - light.turn_on:
-          id: local_status_led
+          id: onboard_rgb_led
           red: 100%
           green: 0%
           blue: 0%
-          brightness: 100%
+          brightness: !lambda return id(rgb_alarm_brightness).state / 100.0f;
       - if:
           condition:
             switch.is_on: local_alarm_enabled
@@ -45,59 +34,19 @@ button:
             - switch.turn_on: local_buzzer_output
       - delay: 2s
       - switch.turn_off: local_buzzer_output
+      - light.turn_off: onboard_rgb_led
 
 interval:
   - interval: 2s
     then:
       - if:
           condition:
-            or:
-              - binary_sensor.is_on: co_diagnostic_alarm
-              - binary_sensor.is_on: possible_exhaust
+            and:
+              - switch.is_on: local_alarm_enabled
+              - or:
+                  - binary_sensor.is_on: co_diagnostic_alarm
+                  - binary_sensor.is_on: possible_exhaust
           then:
-            - light.turn_on:
-                id: local_status_led
-                red: 100%
-                green: 0%
-                blue: 0%
-                brightness: 100%
-            - if:
-                condition:
-                  switch.is_on: local_alarm_enabled
-                then:
-                  - switch.turn_on: local_buzzer_output
-                else:
-                  - switch.turn_off: local_buzzer_output
+            - switch.turn_on: local_buzzer_output
           else:
             - switch.turn_off: local_buzzer_output
-            - if:
-                condition:
-                  not:
-                    binary_sensor.is_on: sensor_data_healthy
-                then:
-                  - light.turn_on:
-                      id: local_status_led
-                      red: 0%
-                      green: 0%
-                      blue: 100%
-                      brightness: 40%
-                else:
-                  - if:
-                      condition:
-                        or:
-                          - binary_sensor.is_on: ventilation_recommended
-                          - binary_sensor.is_on: condensation_risk
-                      then:
-                        - light.turn_on:
-                            id: local_status_led
-                            red: 100%
-                            green: 45%
-                            blue: 0%
-                            brightness: 60%
-                      else:
-                        - light.turn_on:
-                            id: local_status_led
-                            red: 0%
-                            green: 100%
-                            blue: 0%
-                            brightness: 25%

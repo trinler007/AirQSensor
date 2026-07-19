@@ -3,6 +3,8 @@ substitutions:
   friendly_name: "AirQ Wohnbereich"
   device_location: "Wohnbereich nahe Truma D6E"
   assessment_location: "im Wohnbereich"
+  # DevKitC-1 initial: GPIO48; bei aufgedruckter Boardrevision v1.1 GPIO38.
+  onboard_rgb_pin: GPIO48
 
 esp32:
   board: esp32-s3-devkitc-1

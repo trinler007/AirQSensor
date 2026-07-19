@@ -22,6 +22,10 @@ substitutions:
   sensor_stale_default: "120.0"
   ze07_service_hours_default: "26280.0"
   scd41_calibration_reference_default: "426.0"
+  # DevKitC-1 initial: GPIO48; DevKitC-1 v1.1: GPIO38.
+  onboard_rgb_pin: GPIO48
+  rgb_warning_brightness_default: "15.0"
+  rgb_alarm_brightness_default: "50.0"
 
 esphome:
   name: ${device_name}
@@ -30,7 +34,7 @@ esphome:
   min_version: 2026.7.0
   project:
     name: trinler.airq_sensor
-    version: "0.2.0"
+    version: "0.2.1"
 
 logger:
   # Alle Stufen werden einkompiliert, der sichere Startwert bleibt DEBUG.
@@ -83,6 +87,13 @@ globals:
     type: float
     restore_value: true
     initial_value: "0.0"
+
+  # Merkt, ob die RGB-LED von der Automatik übernommen wurde. Dadurch bleibt
+  # die manuelle HA-Steuerung unangetastet, solange keine Automatik aktiv ist.
+  - id: onboard_rgb_automatic_active
+    type: bool
+    restore_value: false
+    initial_value: "false"
 
 # Persistente Diagnosegrenzen. Aenderungen in Home Assistant bleiben nach
 # einem Neustart erhalten. Es handelt sich nicht um zertifizierte Alarmwerte.
@@ -359,6 +370,34 @@ number:
     optimistic: true
     restore_value: true
     mode: box
+
+  - platform: template
+    name: "RGB Warnhelligkeit"
+    id: rgb_warning_brightness
+    unit_of_measurement: "%"
+    icon: mdi:brightness-percent
+    entity_category: config
+    min_value: 1
+    max_value: 100
+    step: 1
+    initial_value: ${rgb_warning_brightness_default}
+    optimistic: true
+    restore_value: true
+    mode: slider
+
+  - platform: template
+    name: "RGB Alarmhelligkeit"
+    id: rgb_alarm_brightness
+    unit_of_measurement: "%"
+    icon: mdi:brightness-percent
+    entity_category: config
+    min_value: 1
+    max_value: 100
+    step: 1
+    initial_value: ${rgb_alarm_brightness_default}
+    optimistic: true
+    restore_value: true
+    mode: slider
 
 select:
   - platform: logger
@@ -948,6 +987,37 @@ text_sensor:
     name: "ESPHome Version"
     entity_category: diagnostic
 
+# Die auf dem DevKitC-1 verbaute adressierbare RGB-LED. Sie bleibt beim Start
+# und im unauffälligen Normalbetrieb aus, kann aber in HA frei bedient werden.
+light:
+  - platform: esp32_rmt_led_strip
+    id: onboard_rgb_led
+    name: "Board RGB-LED"
+    icon: mdi:led-strip-variant
+    pin: ${onboard_rgb_pin}
+    num_leds: 1
+    rgb_order: GRB
+    chipset: WS2812
+    restore_mode: ALWAYS_OFF
+    default_transition_length: 0s
+
+switch:
+  - platform: template
+    id: rgb_warning_automatic
+    name: "RGB Warnanzeige automatisch"
+    icon: mdi:led-on
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+
+  - platform: template
+    id: rgb_alarm_automatic
+    name: "RGB Alarmanzeige automatisch"
+    icon: mdi:alarm-light
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+
 button:
   - platform: restart
     name: "Neustart"
@@ -987,3 +1057,65 @@ interval:
             binary_sensor.is_on: ze07_connected
           then:
             - lambda: id(ze07_operating_hours_total) += 6.0f;
+
+  # Rot = CO-/Abgasalarm, Blau = unvollständige Sensordaten,
+  # Orange = Lüftungs-, Verbrennungs-, Kondensations- oder Servicewarnung.
+  # Sobald die Automatik ihre Anzeige beendet, schaltet sie die LED aus.
+  # War keine Automatik aktiv, bleibt eine manuelle HA-Einstellung erhalten.
+  - interval: 2s
+    then:
+      - if:
+          condition:
+            and:
+              - switch.is_on: rgb_alarm_automatic
+              - or:
+                  - binary_sensor.is_on: co_diagnostic_alarm
+                  - binary_sensor.is_on: possible_exhaust
+          then:
+            - lambda: id(onboard_rgb_automatic_active) = true;
+            - light.turn_on:
+                id: onboard_rgb_led
+                red: 100%
+                green: 0%
+                blue: 0%
+                brightness: !lambda return id(rgb_alarm_brightness).state / 100.0f;
+          else:
+            - if:
+                condition:
+                  and:
+                    - switch.is_on: rgb_warning_automatic
+                    - not:
+                        binary_sensor.is_on: sensor_data_healthy
+                then:
+                  - lambda: id(onboard_rgb_automatic_active) = true;
+                  - light.turn_on:
+                      id: onboard_rgb_led
+                      red: 0%
+                      green: 0%
+                      blue: 100%
+                      brightness: !lambda return id(rgb_warning_brightness).state / 100.0f;
+                else:
+                  - if:
+                      condition:
+                        and:
+                          - switch.is_on: rgb_warning_automatic
+                          - or:
+                              - binary_sensor.is_on: ventilation_recommended
+                              - binary_sensor.is_on: combustion_suspicious
+                              - binary_sensor.is_on: condensation_risk
+                              - binary_sensor.is_on: ze07_service_due
+                      then:
+                        - lambda: id(onboard_rgb_automatic_active) = true;
+                        - light.turn_on:
+                            id: onboard_rgb_led
+                            red: 100%
+                            green: 35%
+                            blue: 0%
+                            brightness: !lambda return id(rgb_warning_brightness).state / 100.0f;
+                      else:
+                        - if:
+                            condition:
+                              lambda: return id(onboard_rgb_automatic_active);
+                            then:
+                              - light.turn_off: onboard_rgb_led
+                              - lambda: id(onboard_rgb_automatic_active) = false;

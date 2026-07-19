@@ -3,6 +3,8 @@ substitutions:
   friendly_name: "AirQ Fahrerhaus"
   device_location: "Fahrerhaus nahe Eberspächer-Heizung"
   assessment_location: "im Fahrerhaus"
+  # DevKitC-1 initial: GPIO48; bei aufgedruckter Boardrevision v1.1 GPIO38.
+  onboard_rgb_pin: GPIO48
 
 esp32:
   board: esp32-s3-devkitc-1
