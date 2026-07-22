@@ -1,4 +1,21 @@
 # Beispiel: Entitäts- und Notify-Namen nach dem Einbinden der Geräte anpassen.
+- alias: "AirQ CO oder CO2 Warnung"
+  id: airq_co_oder_co2_warnung
+  mode: parallel
+  triggers:
+    - trigger: state
+      entity_id:
+        - binary_sensor.airq_wohnbereich_co_oder_co2_warnung
+        - binary_sensor.airq_fahrerhaus_co_oder_co2_warnung
+      to: "on"
+  actions:
+    - action: notify.mobile_app_MEIN_TELEFON
+      data:
+        title: "AirQ: CO- oder CO2-Warnung"
+        message: >-
+          {{ trigger.to_state.attributes.friendly_name }} wurde ausgelöst.
+          CO- und CO2-Einzelwarnung sowie die aktuellen Messwerte prüfen und lüften.
+
 - alias: "AirQ CO Diagnosealarm"
   id: airq_co_diagnosealarm
   mode: parallel

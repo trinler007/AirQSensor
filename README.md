@@ -81,7 +81,7 @@ Die lokale externe Komponente liest den aktiven 9-Byte-Datenrahmen des ZE07-CO, 
 
 Boarddefinition, WLAN, API-Verschlüsselung, OTA-Zugang und die authentifizierte Quelle der externen Komponente stehen bewusst separat in `wohnbereich.yaml` und `fahrerhaus.yaml`. Damit lassen sich Hardwarevarianten und Sicherheitsschlüssel je Gerät unabhängig verwalten. Sensoren, Busbelegung und Bewertungslogik werden als Remote-Package direkt aus `common/air-quality.yaml` auf GitHub geladen.
 
-Der serielle Logger läuft auf dem ESP32-S3-DevKitC-1 explizit über `UART0` (GPIO43/44). Der ZE07 verwendet unabhängig davon UART1 mit RX auf GPIO18. Alle Logstufen bis `VERY_VERBOSE` sind einkompiliert; nach jedem Start gilt `DEBUG`. Die Konfigurationsentität „Logger Level“ kann das globale Level in Home Assistant ohne Neustart ändern. `VERBOSE` und `VERY_VERBOSE` sind nur für kurze Diagnosen vorgesehen und werden bewusst nicht über einen Neustart hinweg gespeichert. Bei jeder Konfigurations- oder Funktionsänderung wird `esphome.project.version` in `common/air-quality.yaml` erhöht. Aktuelle Projektversion: `0.2.1`.
+Der serielle Logger läuft auf dem ESP32-S3-DevKitC-1 explizit über `UART0` (GPIO43/44). Der ZE07 verwendet unabhängig davon UART1 mit RX auf GPIO18. Alle Logstufen bis `VERY_VERBOSE` sind einkompiliert; nach jedem Start gilt `DEBUG`. Die Konfigurationsentität „Logger Level“ kann das globale Level in Home Assistant ohne Neustart ändern. `VERBOSE` und `VERY_VERBOSE` sind nur für kurze Diagnosen vorgesehen und werden bewusst nicht über einen Neustart hinweg gespeichert. Bei jeder Konfigurations- oder Funktionsänderung wird `esphome.project.version` in `common/air-quality.yaml` erhöht. Aktuelle Projektversion: `0.2.2`.
 
 Da das Repository privat ist, enthalten beide lokalen Geräte-YAMLs die Git-Zugangsdaten als `!secret`-Verweise sowohl beim Package als auch bei `external_components`. Dadurch reichen für ESPHome in Home Assistant die gewünschte Geräte-YAML und eine passende `secrets.yaml`; die Verzeichnisse `common/` und `components/` müssen nicht manuell kopiert werden. ESPHome prüft stündlich auf Änderungen des Branches `main`.
 
@@ -93,6 +93,7 @@ Für `github_password` ist ein Fine-grained GitHub Personal Access Token mit aus
 - WLAN-Signal, Uptime, Gerätestatus und ESPHome-Version
 - CO-, VOC- und NOx-Trends als Änderung pro Minute
 - „Lüften empfohlen“, „Heizung oder Verbrennung auffällig“, „Mögliche Abgase“ und „CO Diagnosealarm“
+- eigenständige „CO Warnung“, „CO2 Warnung“ und kombinierte „CO oder CO2 Warnung“ für Automationen und EMA-Schleifen
 - UART-Diagnose: Verbindung, Framefehler und gemeldeter CO-Messbereich
 - Taupunkt, absolute Feuchte, geschätzte Kältebrückentemperatur und Kondensationsreserve
 - Datenalter je Sensor, zusammengefasster Sensorzustand und Warnung bei veralteten Messdaten
@@ -105,6 +106,8 @@ Für `github_password` ist ein Fine-grained GitHub Personal Access Token mit aus
 - kompakte „Luftqualität Kurzbewertung“ mit Gesamtstufe und nur den negativ beitragenden Werten
 
 Die Bewertungslogik kombiniert Absolutwerte und Ein-Minuten-Trends. Alle Grenzen erscheinen in Home Assistant als Zahlenentitäten der Kategorie „Konfiguration“. Änderungen werden auf dem ESP gespeichert und bleiben nach einem Neustart erhalten. Die Startwerte können zusätzlich über die `substitutions` am Anfang von `common/air-quality.yaml` geändert werden. Bereits gespeicherte HA-Werte haben danach Vorrang. Trends direkt nach Neustart benötigen mindestens zwei Messintervalle.
+
+Die Binärsensoren „CO Warnung“ und „CO2 Warnung“ reagieren ausschließlich auf die Absolutwerte. CO verwendet „Grenzwert CO erhöht“ (standardmäßig 5 ppm), CO₂ verwendet „Grenzwert CO2 lüften“ (standardmäßig 1000 ppm). „CO oder CO2 Warnung“ fasst beide Zustände per ODER zusammen und eignet sich damit als einzelner Eingang für Home-Assistant-Automationen oder eine EMA-Dauerschleife. Zur Entprellung muss CO 10 Sekunden und CO₂ 30 Sekunden über dem Wert liegen; nach Unterschreitung bleibt die Warnung noch zwei Minuten aktiv.
 
 ### Startwerte der Bewertung
 

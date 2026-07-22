@@ -34,7 +34,7 @@ esphome:
   min_version: 2026.7.0
   project:
     name: trinler.airq_sensor
-    version: "0.2.1"
+    version: "0.2.2"
 
 logger:
   # Alle Stufen werden einkompiliert, der sichere Startwert bleibt DEBUG.
@@ -680,6 +680,36 @@ binary_sensor:
     entity_category: diagnostic
     lambda: return id(ze07_operating_hours_total) >= id(ze07_service_hours_limit).state;
 
+  # Reine Schwellwertsensoren für HA-Automationen und EMA-Dauerschleifen.
+  # Die Warnwerte sind über die bereits vorhandenen HA-Zahlen einstellbar.
+  - platform: template
+    name: "CO Warnung"
+    id: co_warning
+    device_class: carbon_monoxide
+    lambda: |-
+      if (isnan(id(co).state)) return {};
+      return id(co).state >= id(co_elevated_limit).state;
+    filters:
+      - delayed_on: 10s
+      - delayed_off: 2min
+
+  - platform: template
+    name: "CO2 Warnung"
+    id: co2_warning
+    device_class: problem
+    lambda: |-
+      if (isnan(id(co2).state)) return {};
+      return id(co2).state >= id(co2_ventilation_limit).state;
+    filters:
+      - delayed_on: 30s
+      - delayed_off: 2min
+
+  - platform: template
+    name: "CO oder CO2 Warnung"
+    id: co_or_co2_warning
+    device_class: safety
+    lambda: return id(co_warning).state || id(co2_warning).state;
+
   - platform: template
     name: "Lüften empfohlen"
     id: ventilation_recommended
@@ -1104,6 +1134,8 @@ interval:
                               - binary_sensor.is_on: combustion_suspicious
                               - binary_sensor.is_on: condensation_risk
                               - binary_sensor.is_on: ze07_service_due
+                              - binary_sensor.is_on: co_warning
+                              - binary_sensor.is_on: co2_warning
                       then:
                         - lambda: id(onboard_rgb_automatic_active) = true;
                         - light.turn_on:
