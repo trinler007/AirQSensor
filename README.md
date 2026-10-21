@@ -81,17 +81,19 @@ Die lokale externe Komponente liest den aktiven 9-Byte-Datenrahmen des ZE07-CO, 
 
 Boarddefinition, WLAN, API-Verschlüsselung, OTA-Zugang und die authentifizierte Quelle der externen Komponente stehen bewusst separat in `wohnbereich.yaml` und `fahrerhaus.yaml`. Damit lassen sich Hardwarevarianten und Sicherheitsschlüssel je Gerät unabhängig verwalten. Sensoren, Busbelegung und Bewertungslogik werden als Remote-Package direkt aus `common/air-quality.yaml` auf GitHub geladen.
 
-Der serielle Logger läuft auf dem ESP32-S3-DevKitC-1 explizit über `UART0` (GPIO43/44). Der ZE07 verwendet unabhängig davon UART1 mit RX auf GPIO18. Alle Logstufen bis `VERY_VERBOSE` sind einkompiliert; nach jedem Start gilt `DEBUG`. Die Konfigurationsentität „Logger Level“ kann das globale Level in Home Assistant ohne Neustart ändern. `VERBOSE` und `VERY_VERBOSE` sind nur für kurze Diagnosen vorgesehen und werden bewusst nicht über einen Neustart hinweg gespeichert. Bei jeder Konfigurations- oder Funktionsänderung wird `esphome.project.version` in `common/air-quality.yaml` erhöht. Aktuelle Projektversion: `0.2.3`; mindestens ESPHome `2026.8.0` ist erforderlich.
+Der serielle Logger läuft auf dem ESP32-S3-DevKitC-1 explizit über `UART0` (GPIO43/44). Der ZE07 verwendet unabhängig davon UART1 mit RX auf GPIO18. Alle Logstufen bis `VERY_VERBOSE` sind einkompiliert; nach jedem Start gilt `DEBUG`. Die Konfigurationsentität „Logger Level“ kann das globale Level in Home Assistant ohne Neustart ändern. `VERBOSE` und `VERY_VERBOSE` sind nur für kurze Diagnosen vorgesehen und werden bewusst nicht über einen Neustart hinweg gespeichert. Bei jeder Konfigurations- oder Funktionsänderung wird `esphome.project.version` in `common/air-quality.yaml` erhöht. Aktuelle Projektversion: `0.3.0`; mindestens ESPHome `2026.8.0` ist erforderlich.
 
-Da das Repository privat ist, enthalten beide lokalen Geräte-YAMLs die Git-Zugangsdaten als `!secret`-Verweise sowohl beim Package als auch bei `external_components`. Dadurch reichen für ESPHome in Home Assistant die gewünschte Geräte-YAML und eine passende `secrets.yaml`; die Verzeichnisse `common/` und `components/` müssen nicht manuell kopiert werden. ESPHome prüft stündlich auf Änderungen des Branches `main`.
+Das Repository ist öffentlich; Package und `external_components` werden ohne Zugangsdaten geladen. Dadurch reichen für ESPHome in Home Assistant die gewünschte Geräte-YAML und eine passende `secrets.yaml`; die Verzeichnisse `common/` und `components/` müssen nicht manuell kopiert werden.
 
-Für `github_password` ist ein Fine-grained GitHub Personal Access Token mit ausschließlich lesendem Zugriff auf den Inhalt dieses einen Repositorys vorgesehen. Kein GitHub-Kontopasswort verwenden. ESPHome beziehungsweise Git speichert die Zugangsdaten technisch bedingt im lokalen `.esphome`-Cache im Klartext; der Home-Assistant-Host und seine Backups müssen daher entsprechend geschützt werden.
+Beide Geräte-YAMLs referenzieren bewusst einen Release-Tag (aktuell `v0.3.0`) statt `main`. So landet ein Push nicht beim nächsten Kompilieren ungewollt im Fahrzeug. Für ein Update wird der Tag in beiden Dateien an zwei Stellen (`external_components` und `packages`) angehoben. Jede Version mit Funktionsänderung erhält einen passenden Git-Tag `vX.Y.Z`, der zu `esphome.project.version` passt.
 
 ## Home-Assistant-Entitäten
 
 - CO₂, CO, VOC Index, NOx Index, Temperatur und Luftfeuchte
 - WLAN-Signal, Uptime, Gerätestatus und ESPHome-Version
 - CO-, VOC- und NOx-Trends als Änderung pro Minute
+- CO-Grundlinie (24-h-Minimum) und CO über Grundlinie für schleichende Anstiege
+- Konfigurationsschalter „Temperatur in Bewertung“ je Messort
 - „Lüften empfohlen“, „Heizung oder Verbrennung auffällig“, „Mögliche Abgase“ und „CO Diagnosealarm“
 - eigenständige „CO Warnung“, „CO2 Warnung“ und kombinierte „CO oder CO2 Warnung“ für Automationen und EMA-Schleifen
 - UART-Diagnose: Verbindung, Framefehler und gemeldeter CO-Messbereich
@@ -141,17 +143,27 @@ Ohne externen Oberflächenfühler schätzt das Basispaket die Temperatur einer K
 
 Die standardmäßig deaktivierten Wartungsschaltflächen erlauben eine kontrollierte SCD41-Zwangskalibrierung, einen SCD41-Werksreset und das Zurücksetzen der ZE07-Betriebsstunden. Vor einer Zwangskalibrierung muss der SCD41 mindestens drei Minuten in einer homogenen Umgebung mit verlässlich bekannter CO₂-Konzentration laufen. Ein Werksreset löscht die Kalibrierdaten des SCD41 und darf nicht als allgemeine Fehlerbehebung ausgelöst werden.
 
+### Messort-spezifische Bewertung
+
+Der Konfigurationsschalter „Temperatur in Bewertung“ legt fest, ob die Raumtemperatur die Gesamtstufe und die Kurzbewertung beeinflusst. In zeitweise unbeheizten Bereichen würde sonst jede kalte Nacht als „mäßig“ oder „auffällig“ gemeldet und die Meldung stumpft ab. Die Kondensationsreserve wird unabhängig davon immer bewertet. Der Startwert kommt aus der Substitution `assess_temperature_restore`; `fahrerhaus.yaml` setzt ihn auf `RESTORE_DEFAULT_OFF`.
+
+`fahrerhaus.yaml` setzt außerdem `co_elevated_default` auf 3 ppm. Elektrochemische CO-Zellen verlieren bei Kälte Empfindlichkeit und lesen dann eher zu niedrig, und der Messpunkt liegt nahe der Dieselheizung. Wie alle Grenzwerte gilt die Substitution nur als Startwert: Ist auf dem Gerät bereits ein Wert gespeichert, muss „Grenzwert CO erhöht“ in Home Assistant angepasst werden.
+
+Die Substitution `scd41_asc` steuert die automatische Selbstkalibrierung des SCD41 je Gerät (siehe Hinweise unter Inbetriebnahme).
+
+### CO-Grundlinie
+
+Der ZE07 zeigt häufig einen kleinen, stabilen Nullpunkt-Offset. „CO Grundlinie 24h“ ist das gleitende Minimum der letzten 24 Stunden in Stundenfenstern, „CO über Grundlinie“ die Differenz zum aktuellen Wert. Damit werden langsame Anstiege sichtbar, die weder die Trendschwelle (pro Minute) noch die Absolutschwelle auslösen, etwa eine über Stunden leicht undichte Abgasführung. Beide Werte sind reine Diagnose und fließen nicht in Warnungen ein. Nach einem Neustart baut sich das Fenster neu auf; ein zum Startzeitpunkt bereits erhöhter Wert wird zunächst als Grundlinie gesehen.
+
 ## Optionale Hardwarepakete
 
-Die Pakete unter `optional/` werden nicht automatisch geladen. Nur tatsächlich vorhandene Hardware darf in der Geräte-YAML ergänzt werden. Bei der aktuellen privaten GitHub-Package-Konfiguration werden die gewünschten Dateien einfach der bestehenden `files`-Liste hinzugefügt:
+Die Pakete unter `optional/` werden nicht automatisch geladen. Nur tatsächlich vorhandene Hardware darf in der Geräte-YAML ergänzt werden. Die gewünschten Dateien werden einfach der bestehenden `files`-Liste hinzugefügt:
 
 ```yaml
 packages:
   air_quality:
     url: https://github.com/trinler007/AirQSensor
-    username: !secret github_username
-    password: !secret github_password
-    ref: main
+    ref: v0.3.0
     files:
       - common/air-quality.yaml
       # Nur bei eingebauter Hardware aktivieren:
@@ -159,7 +171,7 @@ packages:
       - optional/bmp390.yaml
       - optional/sps30.yaml
       - optional/status-indicators.yaml
-    refresh: 1h
+    refresh: 1d
 ```
 
 | Paket | Zusatzhardware und Anschluss | Funktion |
@@ -196,8 +208,8 @@ Die Entity-IDs in der Datei sind auf die mitgelieferten Gerätenamen ausgelegt u
 
 ## Inbetriebnahme
 
-1. `secrets.example.yaml` als `secrets.yaml` kopieren und Zugangsdaten einsetzen. `github_password` erhält ein auf dieses Repository beschränktes Fine-grained GitHub-Lesetoken. Wohnbereich und Fahrerhaus verwenden getrennte API-Schlüssel sowie getrennte OTA- und Fallback-Passwörter; WLAN- und GitHub-Zugang sind standardmäßig gemeinsam.
-2. `wohnbereich.yaml` oder `fahrerhaus.yaml` in den ESPHome-Konfigurationsordner von Home Assistant übernehmen. Das gemeinsame Package und die ZE07-Komponente werden beim Validieren beziehungsweise Kompilieren von GitHub geladen.
+1. `secrets.example.yaml` als `secrets.yaml` kopieren und Zugangsdaten einsetzen. Wohnbereich und Fahrerhaus verwenden getrennte API-Schlüssel sowie getrennte OTA- und Fallback-Passwörter; der WLAN-Zugang ist standardmäßig gemeinsam.
+2. `wohnbereich.yaml` oder `fahrerhaus.yaml` in den ESPHome-Konfigurationsordner von Home Assistant übernehmen. Das gemeinsame Package und die ZE07-Komponente werden beim Validieren beziehungsweise Kompilieren in der referenzierten Tag-Version von GitHub geladen.
 3. Verdrahtung und Versorgungsspannungen am konkreten Breakout prüfen. Noch keinen Sensor in ein geschlossenes Gehäuse setzen.
 4. Konfiguration validieren: `esphome config wohnbereich.yaml` und `esphome config fahrerhaus.yaml`.
 5. Erstinstallation per USB: `esphome run wohnbereich.yaml` beziehungsweise `esphome run fahrerhaus.yaml`.
