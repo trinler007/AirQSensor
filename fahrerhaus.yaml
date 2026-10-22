@@ -5,6 +5,12 @@ substitutions:
   assessment_location: "im Fahrerhaus"
   # DevKitC-1 initial: GPIO48; bei aufgedruckter Boardrevision v1.1 GPIO38.
   onboard_rgb_pin: GPIO48
+  # Das Fahrerhaus ist nachts oft unbeheizt: Temperatur nicht in die
+  # Gesamtbewertung einbeziehen. Kondensationsreserve wird weiter bewertet.
+  assess_temperature_restore: RESTORE_DEFAULT_OFF
+  # Elektrochemische Zelle liest bei Kälte eher zu niedrig; nahe der
+  # Eberspächer daher eine niedrigere Startschwelle.
+  co_elevated_default: "3.0"
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -31,18 +37,14 @@ external_components:
   - source:
       type: git
       url: https://github.com/trinler007/AirQSensor
-      ref: main
-      username: !secret github_username
-      password: !secret github_password
+      ref: v0.3.0  # Release-Tag; bewusst anheben, nicht auf main zeigen lassen
     components: [ze07_co]
-    refresh: 1h
+    refresh: 1d
 
 packages:
   air_quality:
     url: https://github.com/trinler007/AirQSensor
-    username: !secret github_username
-    password: !secret github_password
-    ref: main
+    ref: v0.3.0  # Release-Tag; bewusst anheben, nicht auf main zeigen lassen
     files:
       - common/air-quality.yaml
-    refresh: 1h
+    refresh: 1d

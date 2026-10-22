@@ -31,18 +31,14 @@ external_components:
   - source:
       type: git
       url: https://github.com/trinler007/AirQSensor
-      ref: main
-      username: !secret github_username
-      password: !secret github_password
+      ref: v0.3.0  # Release-Tag; bewusst anheben, nicht auf main zeigen lassen
     components: [ze07_co]
-    refresh: 1h
+    refresh: 1d
 
 packages:
   air_quality:
     url: https://github.com/trinler007/AirQSensor
-    username: !secret github_username
-    password: !secret github_password
-    ref: main
+    ref: v0.3.0  # Release-Tag; bewusst anheben, nicht auf main zeigen lassen
     files:
       - common/air-quality.yaml
-    refresh: 1h
+    refresh: 1d

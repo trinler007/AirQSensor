@@ -26,6 +26,11 @@ substitutions:
   onboard_rgb_pin: GPIO48
   rgb_warning_brightness_default: "15.0"
   rgb_alarm_brightness_default: "50.0"
+  # Temperatur in die Gesamtbewertung einbeziehen (RESTORE_DEFAULT_ON/OFF).
+  # Für zeitweise unbeheizte Bereiche wie das Fahrerhaus lokal auf OFF setzen.
+  assess_temperature_restore: RESTORE_DEFAULT_ON
+  # SCD41-ASC nur aktiv lassen, wenn der Sensor regelmäßig Frischluft sieht.
+  scd41_asc: "true"
 
 esphome:
   name: ${device_name}
@@ -34,7 +39,7 @@ esphome:
   min_version: 2026.8.0
   project:
     name: trinler.airq_sensor
-    version: "0.2.3"
+    version: "0.3.0"
 
 logger:
   # Alle Stufen werden einkompiliert, der sichere Startwert bleibt DEBUG.
@@ -411,7 +416,7 @@ sensor:
     address: 0x62
     measurement_mode: low_power_periodic
     update_interval: 30s
-    automatic_self_calibration: true
+    automatic_self_calibration: ${scd41_asc}
     co2:
       name: "CO₂"
       id: co2
@@ -634,6 +639,52 @@ sensor:
       previous = current;
       return delta;
 
+  # Gleitendes 24-h-Minimum des CO-Werts in Stundenfenstern. Der ZE07 zeigt
+  # oft einen kleinen Nullpunkt-Offset; die Differenz macht schleichende
+  # Anstiege unterhalb der Absolutschwellen sichtbar. Nur Diagnose, fließt
+  # nicht in Warnungen ein. Nach einem Neustart baut sich das Fenster neu auf.
+  - platform: template
+    name: "CO Grundlinie 24h"
+    id: co_baseline
+    unit_of_measurement: "ppm"
+    icon: mdi:molecule-co
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      static float bucket_min[24];
+      static bool initialized = false;
+      static uint8_t current_bucket = 0;
+      static uint8_t minutes = 0;
+      if (!initialized) {
+        for (auto &v : bucket_min) v = NAN;
+        initialized = true;
+      }
+      const float current = id(co).state;
+      if (isnan(current)) return {};
+      if (++minutes >= 60) {
+        minutes = 0;
+        current_bucket = (current_bucket + 1) % 24;
+        bucket_min[current_bucket] = NAN;
+      }
+      if (isnan(bucket_min[current_bucket]) || current < bucket_min[current_bucket])
+        bucket_min[current_bucket] = current;
+      float baseline = NAN;
+      for (const auto v : bucket_min)
+        if (!isnan(v) && (isnan(baseline) || v < baseline)) baseline = v;
+      return baseline;
+
+  - platform: template
+    name: "CO über Grundlinie"
+    id: co_above_baseline
+    unit_of_measurement: "ppm"
+    icon: mdi:molecule-co
+    accuracy_decimals: 1
+    update_interval: 60s
+    lambda: |-
+      if (isnan(id(co).state) || isnan(id(co_baseline).state)) return {};
+      return id(co).state - id(co_baseline).state;
+
 binary_sensor:
   - platform: status
     name: "Status"
@@ -828,7 +879,10 @@ text_sensor:
         if (severity < 2) severity = 2;
       }
 
-      if (temperature_value < id(temperature_min_limit).state) {
+      const bool temperature_assessed = id(assess_temperature).state;
+      if (!temperature_assessed) {
+        temperature_text = "nicht bewertet";
+      } else if (temperature_value < id(temperature_min_limit).state) {
         temperature_text = "zu kalt";
         if (severity < 1) severity = 1;
       } else if (temperature_value > id(temperature_max_limit).state) {
@@ -870,8 +924,9 @@ text_sensor:
       } else if (!isnan(id(condensation_margin).state) &&
                  id(condensation_margin).state <= id(condensation_warning_limit).state) {
         recommendation = "Kältebrücken prüfen und Feuchte reduzieren";
-      } else if (temperature_value < id(temperature_min_limit).state ||
-                 temperature_value > id(temperature_max_limit).state ||
+      } else if ((temperature_assessed &&
+                  (temperature_value < id(temperature_min_limit).state ||
+                   temperature_value > id(temperature_max_limit).state)) ||
                  humidity_value < id(humidity_min_limit).state ||
                  humidity_value > id(humidity_max_limit).state) {
         recommendation = "Heizung oder Lüftung anpassen";
@@ -945,8 +1000,9 @@ text_sensor:
         if (severity < 2) severity = 2;
       }
 
-      if (id(temperature).state < id(temperature_min_limit).state ||
-          id(temperature).state > id(temperature_max_limit).state) {
+      if (id(assess_temperature).state &&
+          (id(temperature).state < id(temperature_min_limit).state ||
+           id(temperature).state > id(temperature_max_limit).state)) {
         add_value(str_sprintf("Temperatur %.1f Grad", id(temperature).state));
         if (severity < 1) severity = 1;
       }
@@ -1032,6 +1088,14 @@ light:
     default_transition_length: 0s
 
 switch:
+  - platform: template
+    id: assess_temperature
+    name: "Temperatur in Bewertung"
+    icon: mdi:thermometer-check
+    entity_category: config
+    optimistic: true
+    restore_mode: ${assess_temperature_restore}
+
   - platform: template
     id: rgb_warning_automatic
     name: "RGB Warnanzeige automatisch"
